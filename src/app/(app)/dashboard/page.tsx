@@ -5,17 +5,23 @@ import Link from 'next/link';
 import {
     AlertTriangle,
     Boxes,
-    CheckCircle2,
     ClipboardList,
     Clock,
     FilePlus2,
+    FileSpreadsheet,
     FileText,
+    FolderOpen,
+    Inbox,
     IndianRupee,
+    PiggyBank,
     Quote,
     Receipt,
     ShoppingCart,
+    Truck,
     UserPlus,
-    Users
+    Users,
+    Wallet,
+    type LucideIcon
 } from 'lucide-react';
 import {
     Bar,
@@ -41,8 +47,22 @@ type Summary = {
         active_vendors: { value: number; trend: number };
         purchase_orders: { value: number; trend: number };
         total_spend: { value_minor: number; currency: string; trend: number };
+        avg_po_value?: { value_minor: number; trend: number };
     };
     alerts: { pending_approvals: number; rfq_expiring_today: number; low_stock_items: number };
+    // Optional so the page still renders against an older API build.
+    stats?: {
+        open_rfqs: number;
+        quotations_received: number;
+        pending_payments: number;
+        pending_payments_minor: number;
+        pending_tax_invoices: number;
+        pos_in_progress: number;
+    };
+    rfq_status?: { status: string; count: number }[];
+    po_status?: { status: string; count: number }[];
+    top_vendors?: { vendor_id: string; vendor_name: string; total_minor: number; payments: number }[];
+    spend_by_department?: { department_id: string | null; department_name: string; total_minor: number }[];
     budget: {
         total_minor: number;
         used_minor: number;
@@ -77,6 +97,8 @@ const QUICK_ACTIONS = [
     { href: '/inventory', label: 'Request Stock', icon: Boxes, tone: 'bg-accent-50 text-accent-600' },
     { href: '/vendors/new', label: 'Add Vendor', icon: UserPlus, tone: 'bg-rose-50 text-rose-600' }
 ];
+
+const CHART_COLORS = ['#34a4f6', '#fbb12c', '#8b5cf6', '#10b981', '#ef4444', '#17568b', '#94a3b8'];
 
 export default function DashboardPage() {
     const { user, activePremiseId, activePremiseName } = useAuth();
@@ -121,6 +143,15 @@ export default function DashboardPage() {
           ]
         : [];
 
+    const stats = data?.stats ?? {
+        open_rfqs: 0,
+        quotations_received: 0,
+        pending_payments: 0,
+        pending_payments_minor: 0,
+        pending_tax_invoices: 0,
+        pos_in_progress: 0
+    };
+
     if (loading) return <DashboardSkeleton />;
 
     if (error) {
@@ -152,8 +183,9 @@ export default function DashboardPage() {
             </div>
 
             {/* KPIs */}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
                 <StatCard
+                    compact
                     icon={FileText}
                     tone="violet"
                     label="Total Bids Raised"
@@ -162,6 +194,7 @@ export default function DashboardPage() {
                     caption="vs last 30 days"
                 />
                 <StatCard
+                    compact
                     icon={Users}
                     tone="blue"
                     label="Active Vendors"
@@ -170,6 +203,7 @@ export default function DashboardPage() {
                     caption="vs last 30 days"
                 />
                 <StatCard
+                    compact
                     icon={ShoppingCart}
                     tone="emerald"
                     label="Purchase Orders"
@@ -178,6 +212,7 @@ export default function DashboardPage() {
                     caption="vs last 30 days"
                 />
                 <StatCard
+                    compact
                     icon={IndianRupee}
                     tone="amber"
                     label="Total Spend (This Month)"
@@ -188,6 +223,45 @@ export default function DashboardPage() {
                     trend={data!.kpis.total_spend.trend}
                     caption="vs last 30 days"
                 />
+                <StatCard
+                    compact
+                    icon={Receipt}
+                    tone="cyan"
+                    label="Avg. PO Value"
+                    value={formatMoneyCompact(data!.kpis.avg_po_value?.value_minor ?? 0)}
+                    trend={data!.kpis.avg_po_value?.trend}
+                    caption="vs last 30 days"
+                />
+                <StatCard
+                    compact
+                    icon={PiggyBank}
+                    tone="accent"
+                    label="Budget Used"
+                    value={`${data!.budget.utilisation_percent}%`}
+                    caption={
+                        data!.budget.total_minor
+                            ? `${formatMoneyCompact(data!.budget.remaining_minor)} left this FY`
+                            : 'No budget allocated'
+                    }
+                />
+            </div>
+
+            {/* At-a-glance tabs */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
+                <MiniStat icon={ClipboardList} tone="bg-brand-50 text-brand-600" value={data!.alerts.pending_approvals} label="Pending Approvals" href="/budget" />
+                <MiniStat icon={Clock} tone="bg-amber-50 text-amber-600" value={data!.alerts.rfq_expiring_today} label="RFQs Expiring (24h)" href="/rfq" />
+                <MiniStat icon={AlertTriangle} tone="bg-rose-50 text-rose-600" value={data!.alerts.low_stock_items} label="Low Stock Items" href="/inventory" />
+                <MiniStat icon={FolderOpen} tone="bg-violet-50 text-violet-600" value={stats.open_rfqs} label="Open RFQs" href="/rfq" />
+                <MiniStat icon={Inbox} tone="bg-emerald-50 text-emerald-600" value={stats.quotations_received} label="Quotes (30 days)" href="/quotations" />
+                <MiniStat
+                    icon={Wallet}
+                    tone="bg-accent-50 text-accent-600"
+                    value={stats.pending_payments}
+                    label={stats.pending_payments_minor ? `Due · ${formatMoneyCompact(stats.pending_payments_minor)}` : 'Payments Due'}
+                    href="/payments"
+                />
+                <MiniStat icon={FileSpreadsheet} tone="bg-cyan-50 text-cyan-600" value={stats.pending_tax_invoices} label="Tax Invoices Pending" href="/tax-invoices" />
+                <MiniStat icon={Truck} tone="bg-indigo-50 text-indigo-600" value={stats.pos_in_progress} label="POs In Progress" href="/purchase-orders" />
             </div>
 
             {/* Spending + quick actions */}
@@ -252,7 +326,41 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            {/* Budget + activity + alerts */}
+            {/* Pipeline analytics */}
+            <div className="grid gap-4 lg:grid-cols-3">
+                <Card>
+                    <CardHeader title="RFQ Pipeline" />
+                    <Donut
+                        data={(data!.rfq_status ?? []).map((r) => ({ name: humaniseAction(r.status), value: r.count }))}
+                        centerLabel="RFQs"
+                        format={(v) => String(v)}
+                        emptyTitle="No RFQs yet"
+                        emptyHint="Raise a bid to see it move through the pipeline."
+                    />
+                </Card>
+
+                <Card>
+                    <CardHeader title="Purchase Order Status" />
+                    <BarList
+                        rows={(data!.po_status ?? []).map((r) => ({ label: humaniseAction(r.status), value: r.count, display: String(r.count) }))}
+                        emptyTitle="No purchase orders yet"
+                        emptyHint="Select a winning quotation to create one."
+                    />
+                </Card>
+
+                <Card>
+                    <CardHeader title="Spend by Department" action={<span className="text-[11px] text-muted">This FY</span>} />
+                    <Donut
+                        data={(data!.spend_by_department ?? []).map((r) => ({ name: r.department_name, value: r.total_minor }))}
+                        centerLabel="Spent"
+                        format={(v) => formatMoneyCompact(v)}
+                        emptyTitle="No spend recorded"
+                        emptyHint="Completed payments are split by department here."
+                    />
+                </Card>
+            </div>
+
+            {/* Budget + activity + vendors */}
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card>
                     <CardHeader title="Budget Overview" />
@@ -326,32 +434,25 @@ export default function DashboardPage() {
                     )}
                 </Card>
 
-                <div className="space-y-4">
-                    <AlertCard
-                        icon={ClipboardList}
-                        tone="bg-brand-50 text-brand-600"
-                        count={data!.alerts.pending_approvals}
-                        label="Pending Approvals"
-                        hint="Awaiting your action"
-                        href="/budget"
+                <Card>
+                    <CardHeader
+                        title="Top Vendors by Spend"
+                        action={
+                            <Link href="/vendors" className="text-[12px] font-medium text-brand-600 hover:text-brand-700">
+                                View all
+                            </Link>
+                        }
                     />
-                    <AlertCard
-                        icon={Clock}
-                        tone="bg-amber-50 text-amber-600"
-                        count={data!.alerts.rfq_expiring_today}
-                        label="RFQ Expiry"
-                        hint="Closing within 24 hours"
-                        href="/rfq"
+                    <BarList
+                        rows={(data!.top_vendors ?? []).map((v) => ({
+                            label: v.vendor_name,
+                            value: v.total_minor,
+                            display: formatMoneyCompact(v.total_minor)
+                        }))}
+                        emptyTitle="No vendor payments yet"
+                        emptyHint="Vendors you pay this financial year will rank here."
                     />
-                    <AlertCard
-                        icon={AlertTriangle}
-                        tone="bg-rose-50 text-rose-600"
-                        count={data!.alerts.low_stock_items}
-                        label="Low Stock Items"
-                        hint="At or below minimum level"
-                        href="/inventory"
-                    />
-                </div>
+                </Card>
             </div>
 
             {/* Recent quotations */}
@@ -405,41 +506,118 @@ export default function DashboardPage() {
 function LegendRow({ color, label, value }: { color: string; label: string; value: string }) {
     return (
         <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 text-muted">
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
-                {label}
+            <span className="flex min-w-0 items-center gap-2 text-muted">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color }} />
+                <span className="truncate">{label}</span>
             </span>
-            <span className="font-medium text-ink">{value}</span>
+            <span className="shrink-0 font-medium text-ink">{value}</span>
         </div>
     );
 }
 
-function AlertCard({
+function MiniStat({
     icon: Icon,
     tone,
-    count,
+    value,
     label,
-    hint,
     href
 }: {
-    icon: typeof CheckCircle2;
+    icon: LucideIcon;
     tone: string;
-    count: number;
+    value: number;
     label: string;
-    hint: string;
     href: string;
 }) {
     return (
-        <Link href={href} className="card card-pad flex items-center gap-4 transition hover:border-brand-200">
-            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${tone}`}>
-                <Icon className="h-5 w-5" strokeWidth={2} />
+        <Link href={href} className="card flex items-center gap-3 px-3.5 py-3 transition hover:border-brand-200">
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${tone}`}>
+                <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
             </span>
             <div className="min-w-0">
-                <p className="text-xl font-semibold leading-none text-ink">{count}</p>
-                <p className="mt-1 text-[13px] font-medium text-slate-700">{label}</p>
-                <p className="text-[11px] text-muted">{hint}</p>
+                <p className="text-lg font-semibold leading-none text-ink">{value}</p>
+                <p className="mt-1 truncate text-[11px] font-medium text-muted">{label}</p>
             </div>
         </Link>
+    );
+}
+
+function Donut({
+    data,
+    centerLabel,
+    format,
+    emptyTitle,
+    emptyHint
+}: {
+    data: { name: string; value: number }[];
+    centerLabel: string;
+    format: (v: number) => string;
+    emptyTitle: string;
+    emptyHint: string;
+}) {
+    const total = data.reduce((sum, d) => sum + d.value, 0);
+    if (!total) return <EmptyState title={emptyTitle} hint={emptyHint} />;
+
+    return (
+        <div className="flex items-center gap-5">
+            <div className="relative h-[130px] w-[130px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie data={data} dataKey="value" innerRadius={44} outerRadius={62} paddingAngle={2} stroke="none">
+                            {data.map((_, i) => (
+                                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                            ))}
+                        </Pie>
+                        <Tooltip
+                            formatter={(v: number) => format(v)}
+                            contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                    <div className="text-center">
+                        <p className="text-base font-semibold text-ink">{format(total)}</p>
+                        <p className="text-[10px] text-muted">{centerLabel}</p>
+                    </div>
+                </div>
+            </div>
+            <dl className="min-w-0 flex-1 space-y-2 text-[12px]">
+                {data.slice(0, 6).map((d, i) => (
+                    <LegendRow key={d.name} color={CHART_COLORS[i % CHART_COLORS.length]} label={d.name} value={format(d.value)} />
+                ))}
+            </dl>
+        </div>
+    );
+}
+
+function BarList({
+    rows,
+    emptyTitle,
+    emptyHint
+}: {
+    rows: { label: string; value: number; display: string }[];
+    emptyTitle: string;
+    emptyHint: string;
+}) {
+    const max = Math.max(0, ...rows.map((r) => r.value));
+    if (!max) return <EmptyState title={emptyTitle} hint={emptyHint} />;
+
+    return (
+        <ul className="space-y-3.5">
+            {rows.map((r, i) => (
+                <li key={r.label}>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
+                        <span className="truncate font-medium text-slate-700">{r.label}</span>
+                        <span className="shrink-0 font-semibold text-ink">{r.display}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                            className="h-full rounded-full"
+                            style={{ width: `${(r.value / max) * 100}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
+                        />
+                    </div>
+                </li>
+            ))}
+        </ul>
     );
 }
 
@@ -455,9 +633,9 @@ function DashboardSkeleton() {
     return (
         <div className="space-y-5">
             <div className="h-12 w-64 animate-pulse rounded-lg bg-slate-200" />
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="h-[132px] animate-pulse rounded-xl bg-slate-200" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-[112px] animate-pulse rounded-xl bg-slate-200" />
                 ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
