@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
@@ -50,9 +51,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     return (
         <aside className="flex h-full w-[248px] shrink-0 flex-col bg-navy-900 text-slate-300">
             <div className="flex items-center gap-2.5 px-5 py-5">
-                <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-600 text-white">
-                    <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={2.2} />
-                </div>
+                <Image src="/servizing-logo.png" alt="ServiZing" width={36} height={41} priority className="h-9 w-auto" />
                 <div className="leading-tight">
                     <p className="text-[15px] font-semibold text-white">ProcurePro</p>
                     <p className="text-[10px] tracking-wide text-slate-400">Buy Smarter · Manage Better</p>
