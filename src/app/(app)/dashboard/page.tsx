@@ -3,25 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-    AlertTriangle,
     Boxes,
-    ClipboardList,
-    Clock,
     FilePlus2,
-    FileSpreadsheet,
     FileText,
-    FolderOpen,
-    Inbox,
     IndianRupee,
-    PiggyBank,
     Quote,
     Receipt,
     ShoppingCart,
-    Truck,
     UserPlus,
-    Users,
-    Wallet,
-    type LucideIcon
+    Users
 } from 'lucide-react';
 import {
     Bar,
@@ -47,18 +37,9 @@ type Summary = {
         active_vendors: { value: number; trend: number };
         purchase_orders: { value: number; trend: number };
         total_spend: { value_minor: number; currency: string; trend: number };
-        avg_po_value?: { value_minor: number; trend: number };
     };
     alerts: { pending_approvals: number; rfq_expiring_today: number; low_stock_items: number };
     // Optional so the page still renders against an older API build.
-    stats?: {
-        open_rfqs: number;
-        quotations_received: number;
-        pending_payments: number;
-        pending_payments_minor: number;
-        pending_tax_invoices: number;
-        pos_in_progress: number;
-    };
     rfq_status?: { status: string; count: number }[];
     po_status?: { status: string; count: number }[];
     top_vendors?: { vendor_id: string; vendor_name: string; total_minor: number; payments: number }[];
@@ -143,15 +124,6 @@ export default function DashboardPage() {
           ]
         : [];
 
-    const stats = data?.stats ?? {
-        open_rfqs: 0,
-        quotations_received: 0,
-        pending_payments: 0,
-        pending_payments_minor: 0,
-        pending_tax_invoices: 0,
-        pos_in_progress: 0
-    };
-
     if (loading) return <DashboardSkeleton />;
 
     if (error) {
@@ -183,7 +155,7 @@ export default function DashboardPage() {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard
                     compact
                     icon={FileText}
@@ -223,45 +195,6 @@ export default function DashboardPage() {
                     trend={data!.kpis.total_spend.trend}
                     caption="vs last 30 days"
                 />
-                <StatCard
-                    compact
-                    icon={Receipt}
-                    tone="cyan"
-                    label="Avg. PO Value"
-                    value={formatMoneyCompact(data!.kpis.avg_po_value?.value_minor ?? 0)}
-                    trend={data!.kpis.avg_po_value?.trend}
-                    caption="vs last 30 days"
-                />
-                <StatCard
-                    compact
-                    icon={PiggyBank}
-                    tone="accent"
-                    label="Budget Used"
-                    value={`${data!.budget.utilisation_percent}%`}
-                    caption={
-                        data!.budget.total_minor
-                            ? `${formatMoneyCompact(data!.budget.remaining_minor)} left this FY`
-                            : 'No budget allocated'
-                    }
-                />
-            </div>
-
-            {/* At-a-glance tabs */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
-                <MiniStat icon={ClipboardList} tone="bg-brand-50 text-brand-600" value={data!.alerts.pending_approvals} label="Pending Approvals" href="/budget" />
-                <MiniStat icon={Clock} tone="bg-amber-50 text-amber-600" value={data!.alerts.rfq_expiring_today} label="RFQs Expiring (24h)" href="/rfq" />
-                <MiniStat icon={AlertTriangle} tone="bg-rose-50 text-rose-600" value={data!.alerts.low_stock_items} label="Low Stock Items" href="/inventory" />
-                <MiniStat icon={FolderOpen} tone="bg-violet-50 text-violet-600" value={stats.open_rfqs} label="Open RFQs" href="/rfq" />
-                <MiniStat icon={Inbox} tone="bg-emerald-50 text-emerald-600" value={stats.quotations_received} label="Quotes (30 days)" href="/quotations" />
-                <MiniStat
-                    icon={Wallet}
-                    tone="bg-accent-50 text-accent-600"
-                    value={stats.pending_payments}
-                    label={stats.pending_payments_minor ? `Due · ${formatMoneyCompact(stats.pending_payments_minor)}` : 'Payments Due'}
-                    href="/payments"
-                />
-                <MiniStat icon={FileSpreadsheet} tone="bg-cyan-50 text-cyan-600" value={stats.pending_tax_invoices} label="Tax Invoices Pending" href="/tax-invoices" />
-                <MiniStat icon={Truck} tone="bg-indigo-50 text-indigo-600" value={stats.pos_in_progress} label="POs In Progress" href="/purchase-orders" />
             </div>
 
             {/* Spending + quick actions */}
@@ -515,32 +448,6 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
     );
 }
 
-function MiniStat({
-    icon: Icon,
-    tone,
-    value,
-    label,
-    href
-}: {
-    icon: LucideIcon;
-    tone: string;
-    value: number;
-    label: string;
-    href: string;
-}) {
-    return (
-        <Link href={href} className="card flex items-center gap-3 px-3.5 py-3 transition hover:border-brand-200">
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${tone}`}>
-                <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-            </span>
-            <div className="min-w-0">
-                <p className="text-lg font-semibold leading-none text-ink">{value}</p>
-                <p className="mt-1 truncate text-[11px] font-medium text-muted">{label}</p>
-            </div>
-        </Link>
-    );
-}
-
 function Donut({
     data,
     centerLabel,
@@ -633,8 +540,8 @@ function DashboardSkeleton() {
     return (
         <div className="space-y-5">
             <div className="h-12 w-64 animate-pulse rounded-lg bg-slate-200" />
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
-                {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
                     <div key={i} className="h-[112px] animate-pulse rounded-xl bg-slate-200" />
                 ))}
             </div>
