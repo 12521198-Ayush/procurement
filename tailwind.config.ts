@@ -6,19 +6,34 @@ const config: Config = {
         extend: {
             colors: {
                 navy: {
-                    // Sidebar surface, taken from the design reference.
-                    900: '#0b1533',
-                    800: '#101d43',
-                    700: '#16285a',
-                    600: '#1d3a7a'
+                    900: '#0b1b33',
+                    800: '#10243f',
+                    700: '#163150',
+                    600: '#1d4066'
                 },
+                // ServiZing logo blue (#34a4f6 = 500); 600+ are darkened for white-text contrast.
                 brand: {
-                    50: '#eff6ff',
-                    100: '#dbeafe',
-                    200: '#bfdbfe',
-                    500: '#3b82f6',
-                    600: '#2563eb',
-                    700: '#1d4ed8'
+                    50: '#eef8ff',
+                    100: '#d9effe',
+                    200: '#bce3fe',
+                    300: '#8ed2fd',
+                    400: '#59b8fa',
+                    500: '#34a4f6',
+                    600: '#1a7fd1',
+                    700: '#1567ab',
+                    800: '#17568b',
+                    900: '#194973'
+                },
+                // ServiZing logo orange (#fbb12c = 400).
+                accent: {
+                    50: '#fff8eb',
+                    100: '#feedc7',
+                    200: '#fdd98a',
+                    300: '#fcc24d',
+                    400: '#fbb12c',
+                    500: '#f59e0b',
+                    600: '#d97b06',
+                    700: '#b45a09'
                 },
                 ink: '#0f172a',
                 muted: '#64748b',

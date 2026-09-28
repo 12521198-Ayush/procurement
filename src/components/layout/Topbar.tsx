@@ -54,7 +54,7 @@ export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void })
                     aria-label="Notifications"
                 >
                     <Bell className="h-[18px] w-[18px]" />
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent-400 ring-2 ring-white" />
                 </button>
 
                 <div className="relative" ref={menuRef}>

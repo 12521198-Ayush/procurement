@@ -100,7 +100,7 @@ export default function SettingsPage() {
                 {tab === 'email' && (
                     <Card>
                         <CardHeader title="Email delivery" />
-                        <div className="mb-5 flex items-start gap-2.5 rounded-xl bg-blue-50 px-4 py-3 text-[13px] text-blue-800">
+                        <div className="mb-5 flex items-start gap-2.5 rounded-xl bg-brand-50 px-4 py-3 text-[13px] text-brand-800">
                             <Shield className="mt-0.5 h-4 w-4 shrink-0" />
                             <p>
                                 Email is sent through the platform&apos;s shared communication service, so there are no SMTP

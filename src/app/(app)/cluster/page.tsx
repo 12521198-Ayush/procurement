@@ -140,7 +140,7 @@ export default function ClusterPage() {
                                         formatter={(v: number) => formatMoney(v * 100, data.currency)}
                                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }}
                                     />
-                                    <Bar dataKey="spend" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="spend" fill="#34a4f6" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>

@@ -105,7 +105,7 @@ export default function InventoryPage() {
             header: 'Item',
             render: (i) => (
                 <div className="flex items-center gap-2.5">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-600">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-600">
                         <Package className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">

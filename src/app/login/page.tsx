@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Mail, ShieldCheck, ShoppingCart } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowLeft, Loader2, Mail, ShieldCheck } from 'lucide-react';
 import { post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -101,19 +102,19 @@ export default function LoginPage() {
         <div className="grid min-h-screen lg:grid-cols-2">
             {/* Brand panel */}
             <div className="relative hidden flex-col justify-between bg-navy-900 p-12 text-white lg:flex">
-                <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600">
-                        <ShoppingCart className="h-5 w-5" strokeWidth={2.2} />
+                <div className="flex items-center gap-4">
+                    <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-white p-2.5 shadow-lg ring-4 ring-brand-500/20">
+                        <Image src="/servizing-logo.png" alt="ServiZing" width={60} height={68} priority className="h-full w-full object-contain" />
                     </div>
                     <div className="leading-tight">
-                        <p className="text-lg font-semibold">ProcurePro</p>
-                        <p className="text-[11px] tracking-wide text-slate-400">Buy Smarter · Manage Better</p>
+                        <p className="text-2xl font-semibold">ProcurePro</p>
+                        <p className="mt-0.5 text-xs tracking-wide text-slate-400">Buy Smarter · <span className="text-accent-400">Manage Better</span></p>
                     </div>
                 </div>
 
                 <div className="max-w-md">
                     <h1 className="text-3xl font-semibold leading-snug">
-                        Every bid, quotation and purchase order in one place.
+                        Every bid, quotation and purchase order <span className="text-accent-400">in one place.</span>
                     </h1>
                     <p className="mt-4 text-sm leading-relaxed text-slate-400">
                         Raise an RFQ, invite vendors by secure link, compare quotations side by side and
@@ -131,8 +132,8 @@ export default function LoginPage() {
             <div className="flex items-center justify-center bg-white px-6 py-12">
                 <div className="w-full max-w-sm">
                     <div className="mb-8 flex items-center gap-3 lg:hidden">
-                        <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-white">
-                            <ShoppingCart className="h-5 w-5" strokeWidth={2.2} />
+                        <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full bg-white p-2 ring-1 ring-line">
+                            <Image src="/servizing-logo.png" alt="ServiZing" width={44} height={50} priority className="h-full w-full object-contain" />
                         </div>
                         <div className="leading-tight">
                             <p className="text-lg font-semibold text-ink">ProcurePro</p>

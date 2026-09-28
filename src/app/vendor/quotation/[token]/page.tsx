@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, Lock, Send, ShoppingCart } from 'lucide-react';
+import Image from 'next/image';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, Lock, Send } from 'lucide-react';
 import { post, TOKEN_KEY } from '@/lib/api';
 import { countdown, formatDateTime } from '@/lib/format';
 
@@ -147,8 +148,8 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
             <header className="border-b border-line bg-white">
                 <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-5 py-4">
                     <div className="flex items-center gap-2.5">
-                        <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-600 text-white">
-                            <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                        <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-white p-1.5 ring-1 ring-line">
+                            <Image src="/servizing-logo.png" alt="ServiZing" width={36} height={41} priority className="h-full w-full object-contain" />
                         </span>
                         <div className="leading-tight">
                             <p className="text-[15px] font-semibold text-ink">ProcurePro</p>

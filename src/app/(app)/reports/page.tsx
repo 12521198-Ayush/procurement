@@ -13,7 +13,7 @@ import { api } from '@/lib/api';
 import { useResource } from '@/lib/hooks';
 import { formatMoney, formatMoneyCompact } from '@/lib/format';
 
-const PIE_COLORS = ['#2563eb', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+const PIE_COLORS = ['#34a4f6', '#fbb12c', '#8b5cf6', '#10b981', '#ef4444', '#17568b'];
 
 const EXPORTS = [
     { value: 'vendors', label: 'Vendors' },
@@ -103,7 +103,7 @@ export default function ReportsPage() {
                                             <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(v) => `${Math.round(v / 1000)}K`} />
                                             <Tooltip formatter={(v: number) => formatMoney(v * 100)} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                                            <Bar dataKey="value" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="value" fill="#34a4f6" radius={[4, 4, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>

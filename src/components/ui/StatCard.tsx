@@ -3,7 +3,7 @@ import { ArrowDownRight, ArrowUpRight, type LucideIcon } from 'lucide-react';
 
 const TILES: Record<string, string> = {
     violet: 'bg-violet-100 text-violet-600',
-    blue: 'bg-blue-100 text-blue-600',
+    blue: 'bg-brand-100 text-brand-600',
     emerald: 'bg-emerald-100 text-emerald-600',
     amber: 'bg-amber-100 text-amber-600',
     rose: 'bg-rose-100 text-rose-600'

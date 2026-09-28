@@ -65,7 +65,7 @@ export default function DepartmentsPage() {
             header: 'Department',
             render: (d) => (
                 <div className="flex items-center gap-2.5">
-                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-blue-600">
+                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-600">
                         <Building2 className="h-4 w-4" />
                     </span>
                     <span className="font-medium text-ink">{d.name}</span>

@@ -6,7 +6,7 @@ import clsx from 'clsx';
  */
 const TONES: Record<string, string> = {
     green: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-    blue: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+    blue: 'bg-brand-50 text-brand-700 ring-brand-600/20',
     amber: 'bg-amber-50 text-amber-700 ring-amber-600/20',
     orange: 'bg-orange-50 text-orange-700 ring-orange-600/20',
     red: 'bg-rose-50 text-rose-700 ring-rose-600/20',

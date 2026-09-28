@@ -70,11 +70,11 @@ type Summary = {
 };
 
 const QUICK_ACTIONS = [
-    { href: '/rfq/new', label: 'Raise Bid / RFQ', icon: FilePlus2, tone: 'bg-blue-50 text-blue-600' },
+    { href: '/rfq/new', label: 'Raise Bid / RFQ', icon: FilePlus2, tone: 'bg-brand-50 text-brand-600' },
     { href: '/quotations', label: 'View Quotations', icon: Quote, tone: 'bg-violet-50 text-violet-600' },
     { href: '/quotations', label: 'Create Purchase Order', icon: ShoppingCart, tone: 'bg-emerald-50 text-emerald-600' },
     { href: '/payments', label: 'Make Payment', icon: Receipt, tone: 'bg-amber-50 text-amber-600' },
-    { href: '/inventory', label: 'Request Stock', icon: Boxes, tone: 'bg-sky-50 text-sky-600' },
+    { href: '/inventory', label: 'Request Stock', icon: Boxes, tone: 'bg-accent-50 text-accent-600' },
     { href: '/vendors/new', label: 'Add Vendor', icon: UserPlus, tone: 'bg-rose-50 text-rose-600' }
 ];
 
@@ -219,7 +219,7 @@ export default function DashboardPage() {
                                             fontSize: 12
                                         }}
                                     />
-                                    <Bar dataKey="spent" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="spent" fill="#34a4f6" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -270,7 +270,7 @@ export default function DashboardPage() {
                                             endAngle={-270}
                                             stroke="none"
                                         >
-                                            <Cell fill="#2563eb" />
+                                            <Cell fill="#34a4f6" />
                                             <Cell fill="#e2e8f0" />
                                         </Pie>
                                     </PieChart>
@@ -285,7 +285,7 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                             <dl className="min-w-0 flex-1 space-y-3 text-[13px]">
-                                <LegendRow color="#2563eb" label="Used" value={formatMoney(data!.budget.used_minor)} />
+                                <LegendRow color="#34a4f6" label="Used" value={formatMoney(data!.budget.used_minor)} />
                                 <LegendRow color="#e2e8f0" label="Remaining" value={formatMoney(data!.budget.remaining_minor)} />
                                 <div className="border-t border-line pt-3">
                                     <dt className="text-muted">Total Budget</dt>
@@ -329,7 +329,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                     <AlertCard
                         icon={ClipboardList}
-                        tone="bg-blue-50 text-blue-600"
+                        tone="bg-brand-50 text-brand-600"
                         count={data!.alerts.pending_approvals}
                         label="Pending Approvals"
                         hint="Awaiting your action"
