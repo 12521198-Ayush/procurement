@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { post } from './api';
+import { useAuth } from './auth';
 
 type ListResult<T> = { array: T[]; total: number; page: number; limit: number } & Record<string, any>;
 
@@ -10,6 +11,7 @@ type ListResult<T> = { array: T[]; total: number; page: number; limit: number } 
  * endpoint; changing them resets to page 1.
  */
 export function useList<T>(endpoint: string, filters: Record<string, unknown> = {}, options: { limit?: number } = {}) {
+    const { activePremiseId } = useAuth();
     const [data, setData] = useState<ListResult<T> | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export function useList<T>(endpoint: string, filters: Record<string, unknown> = 
 
     useEffect(() => {
         setPage(1);
-    }, [key]);
+    }, [key, activePremiseId]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -38,8 +40,10 @@ export function useList<T>(endpoint: string, filters: Record<string, unknown> = 
         } finally {
             setLoading(false);
         }
+        // The premise is stamped on by the request interceptor, so it is a
+        // dependency here even though it never appears in the body.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [endpoint, key, page, options.limit]);
+    }, [endpoint, key, page, options.limit, activePremiseId]);
 
     useEffect(() => {
         load();
@@ -65,6 +69,7 @@ export function useList<T>(endpoint: string, filters: Record<string, unknown> = 
 
 /** One-shot fetch for detail screens and dashboards. */
 export function useResource<T>(endpoint: string | null, body: Record<string, unknown> = {}) {
+    const { activePremiseId } = useAuth();
     const [data, setData] = useState<T | null>(null);
     const [loading, setLoading] = useState(!!endpoint);
     const [error, setError] = useState<string | null>(null);
@@ -86,7 +91,7 @@ export function useResource<T>(endpoint: string | null, body: Record<string, unk
         return () => {
             cancelled = true;
         };
-    }, [endpoint, key, nonce]);
+    }, [endpoint, key, nonce, activePremiseId]);
 
     return { data, loading, error, reload: () => setNonce((n) => n + 1) };
 }
@@ -103,6 +108,7 @@ export function useDebounced<T>(value: T, delay = 350) {
 
 /** Options for a `<Select>`, loaded from a list endpoint. */
 export function useOptions(endpoint: string, idKey: string, labelKey = 'name') {
+    const { activePremiseId } = useAuth();
     const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
 
     useEffect(() => {
@@ -116,7 +122,7 @@ export function useOptions(endpoint: string, idKey: string, labelKey = 'name') {
         return () => {
             cancelled = true;
         };
-    }, [endpoint, idKey, labelKey]);
+    }, [endpoint, idKey, labelKey, activePremiseId]);
 
     return options;
 }

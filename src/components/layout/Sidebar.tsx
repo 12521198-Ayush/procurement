@@ -10,6 +10,7 @@ import {
     FileText,
     Headset,
     LayoutDashboard,
+    Network,
     PiggyBank,
     Quote,
     Receipt,
@@ -20,11 +21,13 @@ import {
     Users,
     type LucideIcon
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; multiPremiseOnly?: boolean };
 
 export const NAV_ITEMS: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/cluster', label: 'Cluster View', icon: Network, multiPremiseOnly: true },
     { href: '/rfq', label: 'Raise Bid / RFQ', icon: FileText },
     { href: '/quotations', label: 'My Quotations', icon: Quote },
     { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
@@ -41,6 +44,8 @@ export const NAV_ITEMS: NavItem[] = [
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     const pathname = usePathname();
+    const { isMultiPremise } = useAuth();
+    const items = NAV_ITEMS.filter((item) => !item.multiPremiseOnly || isMultiPremise);
 
     return (
         <aside className="flex h-full w-[248px] shrink-0 flex-col bg-navy-900 text-slate-300">
@@ -55,7 +60,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </div>
 
             <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
-                {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+                {items.map(({ href, label, icon: Icon }) => {
                     const active = pathname === href || pathname.startsWith(`${href}/`);
                     return (
                         <Link

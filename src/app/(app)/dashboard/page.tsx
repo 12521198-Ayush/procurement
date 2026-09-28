@@ -79,13 +79,14 @@ const QUICK_ACTIONS = [
 ];
 
 export default function DashboardPage() {
-    const { user } = useAuth();
+    const { user, activePremiseId, activePremiseName } = useAuth();
     const [data, setData] = useState<Summary | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
+        setLoading(true);
         post<Summary>('/procurement/dashboard/summary')
             .then((res) => !cancelled && setData(res))
             .catch((err) => !cancelled && setError(err.message))
@@ -93,7 +94,7 @@ export default function DashboardPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [activePremiseId]);
 
     const greeting = useMemo(() => {
         const h = new Date().getHours();
@@ -139,7 +140,9 @@ export default function DashboardPage() {
                         {greeting}, {user?.name?.split(' ')[0]}
                     </h1>
                     <p className="mt-0.5 text-[13px] text-muted">
-                        Here&apos;s what&apos;s happening with your procurement today.
+                        {activePremiseName
+                            ? `Here's what's happening at ${activePremiseName} today.`
+                            : "Here's what's happening with your procurement today."}
                     </p>
                 </div>
                 <div className="text-right">
