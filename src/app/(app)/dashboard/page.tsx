@@ -197,6 +197,40 @@ export default function DashboardPage() {
                 />
             </div>
 
+            {/* Pipeline analytics */}
+            <div className="grid gap-4 lg:grid-cols-3">
+                <Card>
+                    <CardHeader title="RFQ Pipeline" />
+                    <Donut
+                        data={(data!.rfq_status ?? []).map((r) => ({ name: humaniseAction(r.status), value: r.count }))}
+                        centerLabel="RFQs"
+                        format={(v) => String(v)}
+                        emptyTitle="No RFQs yet"
+                        emptyHint="Raise a bid to see it move through the pipeline."
+                    />
+                </Card>
+
+                <Card>
+                    <CardHeader title="Purchase Order Status" />
+                    <BarList
+                        rows={(data!.po_status ?? []).map((r) => ({ label: humaniseAction(r.status), value: r.count, display: String(r.count) }))}
+                        emptyTitle="No purchase orders yet"
+                        emptyHint="Select a winning quotation to create one."
+                    />
+                </Card>
+
+                <Card>
+                    <CardHeader title="Spend by Department" action={<span className="text-[11px] text-muted">This FY</span>} />
+                    <Donut
+                        data={(data!.spend_by_department ?? []).map((r) => ({ name: r.department_name, value: r.total_minor }))}
+                        centerLabel="Spent"
+                        format={(v) => formatMoneyCompact(v)}
+                        emptyTitle="No spend recorded"
+                        emptyHint="Completed payments are split by department here."
+                    />
+                </Card>
+            </div>
+
             {/* Spending + quick actions */}
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
@@ -256,40 +290,6 @@ export default function DashboardPage() {
                             </Link>
                         ))}
                     </div>
-                </Card>
-            </div>
-
-            {/* Pipeline analytics */}
-            <div className="grid gap-4 lg:grid-cols-3">
-                <Card>
-                    <CardHeader title="RFQ Pipeline" />
-                    <Donut
-                        data={(data!.rfq_status ?? []).map((r) => ({ name: humaniseAction(r.status), value: r.count }))}
-                        centerLabel="RFQs"
-                        format={(v) => String(v)}
-                        emptyTitle="No RFQs yet"
-                        emptyHint="Raise a bid to see it move through the pipeline."
-                    />
-                </Card>
-
-                <Card>
-                    <CardHeader title="Purchase Order Status" />
-                    <BarList
-                        rows={(data!.po_status ?? []).map((r) => ({ label: humaniseAction(r.status), value: r.count, display: String(r.count) }))}
-                        emptyTitle="No purchase orders yet"
-                        emptyHint="Select a winning quotation to create one."
-                    />
-                </Card>
-
-                <Card>
-                    <CardHeader title="Spend by Department" action={<span className="text-[11px] text-muted">This FY</span>} />
-                    <Donut
-                        data={(data!.spend_by_department ?? []).map((r) => ({ name: r.department_name, value: r.total_minor }))}
-                        centerLabel="Spent"
-                        format={(v) => formatMoneyCompact(v)}
-                        emptyTitle="No spend recorded"
-                        emptyHint="Completed payments are split by department here."
-                    />
                 </Card>
             </div>
 

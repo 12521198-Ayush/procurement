@@ -38,6 +38,7 @@ type Approval = {
     status: string;
     awaiting_role: string | null;
     can_act: boolean;
+    blocked_reason: string | null;
     waiting_hours: number;
     current_step: number;
     total_steps: number;
@@ -169,6 +170,11 @@ export default function BudgetPage() {
                             Reject
                         </button>
                     </div>
+                ) : a.status === 'pending' ? (
+                    // A missing button with no explanation reads as a bug.
+                    <p className="text-right text-[12px] text-muted">
+                        {a.blocked_reason || `Only ${a.awaiting_role ?? 'an approver'} can decide this`}
+                    </p>
                 ) : null
         }
     ];
