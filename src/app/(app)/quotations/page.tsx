@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Eye, GitCompare } from 'lucide-react';
+import { GitCompare, ShoppingCart } from 'lucide-react';
 import DataTable, { type Column } from '@/components/ui/DataTable';
 import StatusPill from '@/components/ui/StatusPill';
 import { Tabs } from '@/components/ui/Tabs';
@@ -75,8 +75,17 @@ export default function QuotationsPage() {
                     href={`/quotations/compare/${q.rfq_id}`}
                     className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
                 >
-                    <GitCompare className="h-3.5 w-3.5" />
-                    Compare
+                    {q.status === 'selected' ? (
+                        <>
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                            Purchase order
+                        </>
+                    ) : (
+                        <>
+                            <GitCompare className="h-3.5 w-3.5" />
+                            Compare
+                        </>
+                    )}
                 </Link>
             )
         }

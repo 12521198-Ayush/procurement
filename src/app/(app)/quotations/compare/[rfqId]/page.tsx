@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Award, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, Check, ShoppingCart } from 'lucide-react';
 import { Card, EmptyState } from '@/components/ui/Card';
 import Modal, { SubmitButton } from '@/components/ui/Modal';
 import StatusPill from '@/components/ui/StatusPill';
-import { Field, Select, Textarea } from '@/components/ui/Field';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { post } from '@/lib/api';
@@ -31,7 +31,31 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
 
     const { data, loading, error, reload } = useResource<any>('/procurement/quotations/compare', { rfq_id: rfqId });
     const [selecting, setSelecting] = useState<any>(null);
+    const [creatingPo, setCreatingPo] = useState(false);
     const [busy, setBusy] = useState(false);
+
+    async function createPurchaseOrder(form: FormData) {
+        const selected = data.quotations.find((q: any) => q.status === 'selected');
+        setBusy(true);
+        try {
+            const po = await post('/procurement/purchase-orders/create', {
+                quotation_id: selected.quotation_id,
+                delivery_address: form.get('delivery_address') || undefined,
+                expected_delivery_date: form.get('expected_delivery_date') || undefined,
+                payment_terms: form.get('payment_terms') || undefined,
+                notes: form.get('notes') || undefined
+            });
+            toast.success(
+                po.status === 'pending_approval'
+                    ? `${po.po_number} created and sent for budget approval`
+                    : `${po.po_number} created. Review it and send it to the vendor.`
+            );
+            router.push(`/purchase-orders/${po.po_id}`);
+        } catch (err: any) {
+            toast.error(err.message);
+            setBusy(false);
+        }
+    }
 
     async function confirmSelection(form: FormData) {
         setBusy(true);
@@ -60,7 +84,8 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
         );
     }
 
-    const { rfq, rfq_items, quotations } = data;
+    const { rfq, rfq_items, quotations, purchase_order } = data;
+    const selectedQuote = quotations.find((q: any) => q.status === 'selected');
 
     if (!quotations.length) {
         return (
@@ -86,9 +111,27 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
             />
 
             {rfq.selected_vendor_id && (
-                <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
-                    <Award className="h-4 w-4" />
-                    A vendor has already been selected for this RFQ.
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
+                    <span className="flex items-center gap-2">
+                        <Award className="h-4 w-4" />
+                        {selectedQuote
+                            ? `${selectedQuote.vendor_name} was selected (${selectedQuote.quotation_number}).`
+                            : 'A vendor has already been selected for this RFQ.'}
+                    </span>
+                    {purchase_order ? (
+                        <Link href={`/purchase-orders/${purchase_order.po_id}`} className="btn-primary h-9">
+                            View {purchase_order.po_number}
+                            <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    ) : (
+                        selectedQuote &&
+                        can('PO_CREATE') && (
+                            <button type="button" className="btn-primary h-9" onClick={() => setCreatingPo(true)}>
+                                <ShoppingCart className="h-4 w-4" />
+                                Create purchase order
+                            </button>
+                        )
+                    )}
                 </div>
             )}
 
@@ -209,6 +252,69 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                     </Field>
                     <Field label="Remarks">
                         <Textarea name="remarks" rows={3} placeholder="Recorded in the audit trail." />
+                    </Field>
+                </form>
+            </Modal>
+
+            <Modal
+                open={creatingPo}
+                onClose={() => setCreatingPo(false)}
+                title="Create purchase order"
+                description="Items and prices are taken from the selected quotation. You can review the PO before it is sent to the vendor."
+                footer={
+                    <>
+                        <button type="button" className="btn-ghost" onClick={() => setCreatingPo(false)}>
+                            Cancel
+                        </button>
+                        <SubmitButton form="po-form" type="submit" busy={busy}>
+                            Create purchase order
+                        </SubmitButton>
+                    </>
+                }
+            >
+                <form
+                    id="po-form"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        createPurchaseOrder(new FormData(e.currentTarget));
+                    }}
+                    className="space-y-4"
+                >
+                    {selectedQuote && (
+                        <div className="rounded-lg bg-slate-50 px-4 py-3 text-[13px]">
+                            <div className="flex justify-between">
+                                <span className="text-muted">Vendor</span>
+                                <span className="font-medium text-ink">{selectedQuote.vendor_name}</span>
+                            </div>
+                            <div className="mt-1 flex justify-between">
+                                <span className="text-muted">Quotation</span>
+                                <span className="font-medium text-ink">{selectedQuote.quotation_number}</span>
+                            </div>
+                            <div className="mt-1 flex justify-between">
+                                <span className="text-muted">Order value</span>
+                                <span className="font-semibold text-ink">
+                                    {formatMoney(selectedQuote.grand_total_minor, selectedQuote.currency)}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    <Field label="Delivery address">
+                        <Textarea name="delivery_address" rows={2} defaultValue={rfq.delivery_location || ''} />
+                    </Field>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Expected delivery date">
+                            <Input
+                                type="date"
+                                name="expected_delivery_date"
+                                defaultValue={rfq.expected_delivery_date ? String(rfq.expected_delivery_date).slice(0, 10) : ''}
+                            />
+                        </Field>
+                        <Field label="Payment terms">
+                            <Input name="payment_terms" defaultValue={selectedQuote?.payment_terms || ''} placeholder="e.g. 30 days after delivery" />
+                        </Field>
+                    </div>
+                    <Field label="Notes for the vendor">
+                        <Textarea name="notes" rows={2} />
                     </Field>
                 </form>
             </Modal>

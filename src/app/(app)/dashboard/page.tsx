@@ -72,7 +72,7 @@ type Summary = {
 const QUICK_ACTIONS = [
     { href: '/rfq/new', label: 'Raise Bid / RFQ', icon: FilePlus2, tone: 'bg-blue-50 text-blue-600' },
     { href: '/quotations', label: 'View Quotations', icon: Quote, tone: 'bg-violet-50 text-violet-600' },
-    { href: '/purchase-orders/new', label: 'Create Purchase Order', icon: ShoppingCart, tone: 'bg-emerald-50 text-emerald-600' },
+    { href: '/quotations', label: 'Create Purchase Order', icon: ShoppingCart, tone: 'bg-emerald-50 text-emerald-600' },
     { href: '/payments', label: 'Make Payment', icon: Receipt, tone: 'bg-amber-50 text-amber-600' },
     { href: '/inventory', label: 'Request Stock', icon: Boxes, tone: 'bg-sky-50 text-sky-600' },
     { href: '/vendors/new', label: 'Add Vendor', icon: UserPlus, tone: 'bg-rose-50 text-rose-600' }
