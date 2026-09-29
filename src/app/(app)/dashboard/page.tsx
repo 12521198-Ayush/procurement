@@ -24,6 +24,7 @@ import {
     XAxis,
     YAxis
 } from 'recharts';
+import FinancialSnapshot from '@/components/accounting/FinancialSnapshot';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import StatCard from '@/components/ui/StatCard';
 import StatusPill from '@/components/ui/StatusPill';
@@ -196,6 +197,8 @@ export default function DashboardPage() {
                     caption="vs last 30 days"
                 />
             </div>
+
+            <FinancialSnapshot />
 
             {/* Pipeline analytics */}
             <div className="grid gap-4 lg:grid-cols-3">
