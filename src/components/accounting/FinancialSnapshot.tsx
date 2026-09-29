@@ -3,8 +3,15 @@
 import Link from 'next/link';
 import { ArrowRight, Landmark, Scale, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { BalancedBadge } from '@/components/accounting/AccountingUI';
-import { percentOf, presetPeriod, useReport, type BalanceSheet, type ProfitAndLoss } from '@/lib/accounting';
-import { formatMoney, formatMoneyCompact } from '@/lib/format';
+import {
+    formatINR,
+    formatINRCompact,
+    percentOf,
+    presetPeriod,
+    useReport,
+    type BalanceSheet,
+    type ProfitAndLoss
+} from '@/lib/accounting';
 
 export default function FinancialSnapshot() {
     const period = presetPeriod('fy');
@@ -64,8 +71,8 @@ export default function FinancialSnapshot() {
                     </div>
 
                     <p className="mt-5 text-[12px] font-medium uppercase tracking-wider text-slate-400">Net income</p>
-                    <p className="mt-1 text-3xl font-semibold tracking-tight" title={formatMoney(net)}>
-                        {formatMoneyCompact(net)}
+                    <p className="mt-1 text-3xl font-semibold tracking-tight" title={formatINR(net)}>
+                        {formatINRCompact(net)}
                     </p>
                     <p className="mt-1 text-[12px] text-slate-300">
                         <span className={net >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-rose-300'}>{margin}%</span> net margin
@@ -75,7 +82,7 @@ export default function FinancialSnapshot() {
                     <div className="mt-4">
                         <div className="mb-1.5 flex justify-between text-[11px] text-slate-300">
                             <span>Expenses use {expenseShare}% of revenue</span>
-                            <span>{formatMoneyCompact(total_revenue)}</span>
+                            <span>{formatINRCompact(total_revenue)}</span>
                         </div>
                         <div className="flex h-2 overflow-hidden rounded-full bg-emerald-400/80">
                             <div className="h-full bg-accent-400" style={{ width: `${expenseShare}%` }} />
@@ -90,8 +97,8 @@ export default function FinancialSnapshot() {
                                 <Icon className={`h-4 w-4 ${tone}`} />
                                 {label}
                             </div>
-                            <p className="mt-2 text-xl font-semibold tracking-tight" title={formatMoney(value)}>
-                                {formatMoneyCompact(value)}
+                            <p className="mt-2 text-xl font-semibold tracking-tight" title={formatINR(value)}>
+                                {formatINRCompact(value)}
                             </p>
                         </div>
                     ))}

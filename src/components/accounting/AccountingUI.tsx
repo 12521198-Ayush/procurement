@@ -1,8 +1,75 @@
 'use client';
 
 import clsx from 'clsx';
-import { AlertTriangle, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Search } from 'lucide-react';
 import { PRESETS, TYPE_STYLE, presetPeriod, type AccountType, type Period, type PresetKey } from '@/lib/accounting';
+
+export const TOOLTIP_STYLE = { borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12 };
+
+export function clampPct(pct: number) {
+    return Math.min(100, Math.max(0, pct));
+}
+
+export function Legend({ color, label }: { color: string; label: string }) {
+    return (
+        <span className="flex min-w-0 items-center gap-1.5 text-muted">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color }} />
+            <span className="truncate">{label}</span>
+        </span>
+    );
+}
+
+export function SummaryTile({
+    label,
+    value,
+    accent,
+    extra,
+    hint
+}: {
+    label: string;
+    value: string;
+    accent: string;
+    extra?: React.ReactNode;
+    hint?: string;
+}) {
+    return (
+        <div className={clsx('card border-l-4 px-4 py-3.5', accent)}>
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] font-medium text-muted">{label}</p>
+                {extra}
+            </div>
+            <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-ink">{value}</p>
+            {hint && <p className="mt-0.5 text-[11px] text-slate-400">{hint}</p>}
+        </div>
+    );
+}
+
+export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+    return (
+        <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+                className="input h-9 pl-9 text-[13px]"
+                placeholder={placeholder}
+                aria-label={placeholder}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+            />
+        </div>
+    );
+}
+
+export function ReportSkeleton({ compact = false }: { compact?: boolean }) {
+    return (
+        <div className="space-y-4">
+            {!compact && <div className="h-[210px] animate-pulse rounded-2xl bg-slate-200" />}
+            <div className="grid gap-4 lg:grid-cols-3">
+                <div className="h-[300px] animate-pulse rounded-xl bg-slate-200 lg:col-span-2" />
+                <div className="h-[300px] animate-pulse rounded-xl bg-slate-200" />
+            </div>
+        </div>
+    );
+}
 
 export function TypeBadge({ type }: { type: AccountType }) {
     return (
