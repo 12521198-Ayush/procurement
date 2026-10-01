@@ -49,13 +49,27 @@ export default function NewRfqPage() {
     });
     const [items, setItems] = useState<Item[]>([blankItem()]);
     const [vendorIds, setVendorIds] = useState<string[]>([]);
-    const [terms, setTerms] = useState({ expires_date: '', expires_time: '17:00', terms_and_conditions: '', notes: '' });
+    const [terms, setTerms] = useState({
+        expires_date: '',
+        expires_time: '17:00',
+        opening_date: '',
+        opening_time: '',
+        allow_revision: false,
+        terms_and_conditions: '',
+        notes: ''
+    });
 
     const expiresAt = useMemo(() => {
         if (!terms.expires_date) return null;
         // Interpreted in the browser's zone; the server stores UTC and enforces it.
         return new Date(`${terms.expires_date}T${terms.expires_time || '17:00'}`);
     }, [terms.expires_date, terms.expires_time]);
+
+    // Bids stay sealed until this moment; defaults to the submission deadline.
+    const openingAt = useMemo(() => {
+        if (!terms.opening_date) return expiresAt;
+        return new Date(`${terms.opening_date}T${terms.opening_time || terms.expires_time || '17:00'}`);
+    }, [terms.opening_date, terms.opening_time, terms.expires_time, expiresAt]);
 
     const stepErrors = useMemo(() => {
         if (step === 1 && !basic.title.trim()) return 'Give the RFQ a title.';
@@ -68,9 +82,10 @@ export default function NewRfqPage() {
         if (step === 4) {
             if (!expiresAt) return 'Set the bid expiry date.';
             if (expiresAt <= new Date()) return 'Expiry must be in the future.';
+            if (openingAt && openingAt < expiresAt) return 'Bid opening must be at or after the submission deadline.';
         }
         return null;
-    }, [step, basic.title, items, vendorIds, expiresAt]);
+    }, [step, basic.title, items, vendorIds, expiresAt, openingAt]);
 
     function next() {
         if (stepErrors) {
@@ -90,6 +105,8 @@ export default function NewRfqPage() {
             const created = await post('/procurement/rfq/create', {
                 ...basic,
                 expires_at: expiresAt?.toISOString(),
+                bid_opening_at: openingAt?.toISOString(),
+                allow_quotation_revision: terms.allow_revision,
                 terms_and_conditions: terms.terms_and_conditions,
                 notes: terms.notes,
                 vendor_ids: vendorIds,
@@ -304,6 +321,33 @@ export default function NewRfqPage() {
                                 onChange={(e) => setTerms({ ...terms, expires_time: e.target.value })}
                             />
                         </Field>
+                        <Field label="Bid opening date" hint="Quotations stay sealed until then. Defaults to the expiry.">
+                            <Input
+                                type="date"
+                                value={terms.opening_date}
+                                min={terms.expires_date || undefined}
+                                onChange={(e) => setTerms({ ...terms, opening_date: e.target.value })}
+                            />
+                        </Field>
+                        <Field label="Bid opening time">
+                            <Input
+                                type="time"
+                                value={terms.opening_time}
+                                onChange={(e) => setTerms({ ...terms, opening_time: e.target.value })}
+                            />
+                        </Field>
+                        <label className="flex items-start gap-2.5 text-sm text-slate-700 sm:col-span-2">
+                            <input
+                                type="checkbox"
+                                checked={terms.allow_revision}
+                                onChange={(e) => setTerms({ ...terms, allow_revision: e.target.checked })}
+                                className="mt-0.5 h-4 w-4 rounded border-line text-brand-600"
+                            />
+                            <span>
+                                Allow vendors to revise a submitted quotation until the deadline
+                                <span className="block text-[12px] text-slate-400">Every revision is versioned; earlier versions are kept.</span>
+                            </span>
+                        </label>
                         <Field label="Terms and conditions" className="sm:col-span-2">
                             <Textarea
                                 rows={4}
@@ -361,8 +405,10 @@ export default function NewRfqPage() {
                             </div>
                         </Section>
 
-                        <Section title="Expiry">
+                        <Section title="Expiry & bid opening">
                             <Detail label="Closes at" value={expiresAt ? formatDateTime(expiresAt) : '—'} />
+                            <Detail label="Bids open at" value={openingAt ? formatDateTime(openingAt) : '—'} />
+                            <Detail label="Revisions" value={terms.allow_revision ? 'Allowed until the deadline' : 'Not allowed'} />
                         </Section>
                     </div>
                 )}

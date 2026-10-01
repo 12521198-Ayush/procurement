@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import {
+    BookOpenText,
     Boxes,
     Building2,
+    FileCheck2,
     FileSpreadsheet,
     FileText,
     Headset,
@@ -20,6 +22,7 @@ import {
     ShoppingCart,
     Tags,
     TrendingUp,
+    Truck,
     Users,
     type LucideIcon
 } from 'lucide-react';
@@ -33,8 +36,11 @@ export const NAV_ITEMS: NavItem[] = [
     { href: '/rfq', label: 'Raise Bid / RFQ', icon: FileText },
     { href: '/quotations', label: 'My Quotations', icon: Quote },
     { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
+    { href: '/proforma-invoices', label: 'Proforma Invoices', icon: FileCheck2 },
     { href: '/payments', label: 'Invoices & Payments', icon: Receipt },
+    { href: '/receiving', label: 'Dispatch & GRN', icon: Truck },
     { href: '/tax-invoices', label: 'Tax Invoices', icon: FileSpreadsheet },
+    { href: '/vendor-ledger', label: 'Vendor Ledger', icon: BookOpenText },
     { href: '/inventory', label: 'Inventory', icon: Boxes },
     { href: '/budget', label: 'Budget & Approvals', icon: PiggyBank },
     { href: '/reports', label: 'Reports & Analytics', icon: TrendingUp },

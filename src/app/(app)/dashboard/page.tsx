@@ -25,6 +25,7 @@ import {
     YAxis
 } from 'recharts';
 import FinancialSnapshot from '@/components/accounting/FinancialSnapshot';
+import LifecyclePipeline from '@/components/procurement/LifecyclePipeline';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import StatCard from '@/components/ui/StatCard';
 import StatusPill from '@/components/ui/StatusPill';
@@ -199,6 +200,8 @@ export default function DashboardPage() {
             </div>
 
             <FinancialSnapshot />
+
+            <LifecyclePipeline />
 
             {/* Pipeline analytics */}
             <div className="grid gap-4 lg:grid-cols-3">
@@ -417,7 +420,7 @@ export default function DashboardPage() {
                                         <td className="td font-medium text-ink">{q.quotation_number}</td>
                                         <td className="td">{q.vendor_name}</td>
                                         <td className="td font-medium">
-                                            {formatMoney(q.grand_total_minor, q.currency)}
+                                            {q.grand_total_minor == null ? <span className="text-violet-700">Sealed</span> : formatMoney(q.grand_total_minor, q.currency)}
                                         </td>
                                         <td className="td">
                                             <StatusPill status={q.status} />

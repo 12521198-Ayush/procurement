@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { GitCompare, ShoppingCart } from 'lucide-react';
+import { GitCompare, Lock, ShoppingCart } from 'lucide-react';
 import DataTable, { type Column } from '@/components/ui/DataTable';
 import StatusPill from '@/components/ui/StatusPill';
 import { Tabs } from '@/components/ui/Tabs';
@@ -17,11 +17,13 @@ type Quotation = {
     rfq_number: string | null;
     rfq_title: string | null;
     vendor_name: string;
-    grand_total_minor: number;
+    grand_total_minor?: number;
     currency: string;
     status: string;
     submitted_at: string;
-    delivery_days: number | null;
+    delivery_days?: number | null;
+    sealed?: boolean;
+    bid_opening_at?: string | null;
 };
 
 const TABS = [
@@ -57,12 +59,19 @@ export default function QuotationsPage() {
             key: 'grand_total_minor',
             header: 'Amount',
             align: 'right',
-            render: (q) => <span className="font-medium text-ink">{formatMoney(q.grand_total_minor, q.currency)}</span>
+            render: (q) =>
+                q.sealed ? (
+                    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-violet-700" title={`Bids open ${formatDate(q.bid_opening_at)}`}>
+                        <Lock className="h-3.5 w-3.5" /> Sealed
+                    </span>
+                ) : (
+                    <span className="font-medium text-ink">{formatMoney(q.grand_total_minor, q.currency)}</span>
+                )
         },
         {
             key: 'delivery_days',
             header: 'Delivery',
-            render: (q) => (q.delivery_days != null ? `${q.delivery_days} days` : '—')
+            render: (q) => (q.sealed ? '—' : q.delivery_days != null ? `${q.delivery_days} days` : '—')
         },
         { key: 'submitted_at', header: 'Submitted', render: (q) => formatDate(q.submitted_at) },
         { key: 'status', header: 'Status', render: (q) => <StatusPill status={q.status} /> },
@@ -72,10 +81,15 @@ export default function QuotationsPage() {
             align: 'right',
             render: (q) => (
                 <Link
-                    href={`/quotations/compare/${q.rfq_id}`}
+                    href={q.sealed ? `/rfq/${q.rfq_id}` : `/quotations/compare/${q.rfq_id}`}
                     className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
                 >
-                    {q.status === 'selected' ? (
+                    {q.sealed ? (
+                        <>
+                            <Lock className="h-3.5 w-3.5" />
+                            Bid opening
+                        </>
+                    ) : q.status === 'selected' ? (
                         <>
                             <ShoppingCart className="h-3.5 w-3.5" />
                             Purchase order

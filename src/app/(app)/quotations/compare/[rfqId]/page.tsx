@@ -10,6 +10,7 @@ import StatusPill from '@/components/ui/StatusPill';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
+import BidOpeningPanel from '@/components/procurement/BidOpeningPanel';
 import { post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
@@ -29,7 +30,9 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
     const { can } = useAuth();
     const toast = useToast();
 
-    const { data, loading, error, reload } = useResource<any>('/procurement/quotations/compare', { rfq_id: rfqId });
+    const bidState = useResource<{ sealed: boolean }>('/procurement/rfq/bid-status', { rfq_id: rfqId });
+    const sealed = bidState.data?.sealed;
+    const { data, loading, error, reload } = useResource<any>(sealed === false ? '/procurement/quotations/compare' : null, { rfq_id: rfqId });
     const [selecting, setSelecting] = useState<any>(null);
     const [creatingPo, setCreatingPo] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -75,8 +78,27 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
         }
     }
 
-    if (loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
-    if (error || !data) {
+    if (bidState.loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
+    if (sealed) {
+        return (
+            <div className="space-y-4">
+                <BackLink rfqId={rfqId} />
+                <PageHeader title="Compare quotations" subtitle="Quotations stay sealed until the bids are formally opened." />
+                <BidOpeningPanel rfqId={rfqId} onOpened={() => bidState.reload()} />
+            </div>
+        );
+    }
+    if (loading || !data) {
+        if (error || bidState.error) {
+            return (
+                <Card>
+                    <EmptyState title="Could not load the comparison" hint={(error || bidState.error) ?? undefined} />
+                </Card>
+            );
+        }
+        return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
+    }
+    if (error) {
         return (
             <Card>
                 <EmptyState title="Could not load the comparison" hint={error ?? undefined} />

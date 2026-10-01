@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, Lock, Send } from 'lucide-react';
 import { post, TOKEN_KEY } from '@/lib/api';
 import { countdown, formatDateTime } from '@/lib/format';
@@ -435,6 +436,9 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                                     ? 'Our records show a quotation from you against this RFQ. Contact the procurement team if you need to change it.'
                                     : `Thank you. Your quotation ${result?.quotation_number ?? ''} has been received and the procurement team has been notified.`}
                             </p>
+                            <Link href="/vendor/login" className="btn-ghost mt-5 inline-flex">
+                                Track it in the vendor portal
+                            </Link>
                         </div>
                     </Panel>
                 )}

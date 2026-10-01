@@ -41,7 +41,30 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
     rejected: 'red',
     expired: 'red',
     cancelled: 'red',
-    out_of_stock: 'red'
+    out_of_stock: 'red',
+
+    // Procurement lifecycle
+    selected: 'green',
+    awarded: 'green',
+    posted: 'green',
+    accepted: 'green',
+    issued: 'green',
+    vendor_selected: 'green',
+    quotation_received: 'blue',
+    partially_responded: 'blue',
+    dispatched: 'blue',
+    in_progress: 'blue',
+    new: 'violet',
+    under_evaluation: 'violet',
+    sealed: 'violet',
+    inspection: 'amber',
+    payment_pending: 'amber',
+    partially_paid: 'amber',
+    partially_received: 'amber',
+    partially_accepted: 'amber',
+    not_selected: 'slate',
+    closed: 'slate',
+    vendor_rejected: 'red'
 };
 
 function label(status: string) {

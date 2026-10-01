@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, Clock, Mail, Send, Users, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FolderOpen, Lock, Send, XCircle } from 'lucide-react';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import StatusPill from '@/components/ui/StatusPill';
 import { useToast } from '@/components/ui/Toast';
+import BidOpeningPanel from '@/components/procurement/BidOpeningPanel';
+import DocumentPanel from '@/components/procurement/DocumentPanel';
+import Timeline, { type TimelineEvent } from '@/components/procurement/Timeline';
 import { post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
@@ -25,14 +28,16 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
     const { can } = useAuth();
     const toast = useToast();
     const { data, loading, error, reload } = useResource<any>('/procurement/rfq/detail', { rfq_id: id });
+    const timeline = useResource<{ array: TimelineEvent[] }>('/procurement/lifecycle/events', { rfq_id: id });
     const [busy, setBusy] = useState(false);
 
-    async function act(endpoint: string, successMessage: string) {
+    async function act(endpoint: string, successMessage: string, extra: Record<string, unknown> = {}) {
         setBusy(true);
         try {
-            await post(endpoint, { rfq_id: id });
+            await post(endpoint, { rfq_id: id, ...extra });
             toast.success(successMessage);
             reload();
+            timeline.reload();
         } catch (err: any) {
             toast.error(err.message);
         } finally {
@@ -52,6 +57,8 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
     const timer = countdown(data.expires_at);
     const responded = data.vendors.filter((v: any) => v.has_responded).length;
     const stageIndex = Math.max(LIFECYCLE.indexOf(data.status), data.status === 'partially_responded' ? 1 : 0);
+    const sealed = !!data.bid?.sealed;
+    const isOpenForBids = ['sent', 'open', 'partially_responded', 'quotation_received'].includes(data.status) && !data.is_expired;
 
     return (
         <div className="space-y-5">
@@ -75,6 +82,8 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                             {data.department_name && <span>Department: {data.department_name}</span>}
                             {data.category_name && <span>Category: {data.category_name}</span>}
                             {data.delivery_location && <span>Deliver to: {data.delivery_location}</span>}
+                            <span>Bids open: {formatDateTime(data.bid?.opening_at || data.expires_at)}</span>
+                            <span>Revisions: {data.allow_quotation_revision ? 'allowed' : 'not allowed'}</span>
                         </div>
                     </div>
 
@@ -87,7 +96,27 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                             </p>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <Link href={`/lifecycle?rfq=${data.rfq_id}`} className="btn-ghost">
+                                <FolderOpen className="h-4 w-4" />
+                                Procurement file
+                            </Link>
+                            {sealed && isOpenForBids && can('RFQ_EDIT') && (
+                                <button
+                                    type="button"
+                                    className="btn-ghost"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        act(
+                                            '/procurement/rfq/revision-policy',
+                                            data.allow_quotation_revision ? 'Revisions disabled' : 'Vendors may now revise their quotations',
+                                            { allow: !data.allow_quotation_revision }
+                                        )
+                                    }
+                                >
+                                    {data.allow_quotation_revision ? 'Stop revisions' : 'Allow revisions'}
+                                </button>
+                            )}
                             {data.status === 'draft' && can('RFQ_SEND') && (
                                 <button
                                     type="button"
@@ -99,7 +128,7 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                                     Send to vendors
                                 </button>
                             )}
-                            {responded > 0 && can('QUOTATION_COMPARE') && (
+                            {responded > 0 && !sealed && can('QUOTATION_COMPARE') && (
                                 <Link href={`/quotations/compare/${data.rfq_id}`} className="btn-primary">
                                     Compare {responded} quotation{responded > 1 ? 's' : ''}
                                 </Link>
@@ -138,6 +167,8 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                     })}
                 </ol>
             </Card>
+
+            {!['draft', 'cancelled'].includes(data.status) && <BidOpeningPanel rfqId={data.rfq_id} onOpened={() => { reload(); timeline.reload(); }} />}
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
@@ -180,9 +211,15 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                                             <p className="truncate text-[11px] text-muted">{v.email}</p>
                                         </div>
                                         {v.has_responded ? (
-                                            <span className="shrink-0 text-[12px] font-medium text-emerald-700">
-                                                {formatMoney(v.grand_total_minor)}
-                                            </span>
+                                            sealed ? (
+                                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-violet-700">
+                                                    <Lock className="h-3.5 w-3.5" /> Sealed
+                                                </span>
+                                            ) : (
+                                                <span className="shrink-0 text-[12px] font-medium text-emerald-700">
+                                                    {formatMoney(v.grand_total_minor)}
+                                                </span>
+                                            )
                                         ) : (
                                             <StatusPill status={v.invited_at ? 'pending' : 'draft'} />
                                         )}
@@ -190,6 +227,7 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                                     <p className="mt-1 text-[11px] text-slate-400">
                                         {v.invited_at ? `Invited ${formatDate(v.invited_at)}` : 'Not yet invited'}
                                         {v.last_opened_at && ` · opened ${formatDate(v.last_opened_at)}`}
+                                        {v.revision_count > 0 && ` · revised ${v.revision_count}x`}
                                     </p>
                                 </li>
                             ))}
@@ -208,6 +246,21 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                     </p>
                 </Card>
             )}
+
+            <div className="grid gap-4 lg:grid-cols-2">
+                <DocumentPanel
+                    entityType="rfq"
+                    entityId={data.rfq_id}
+                    title="RFQ documents"
+                    hint="Shared with invited vendors"
+                    canUpload={can('RFQ_EDIT') && can('DOCUMENT_UPLOAD') && !['cancelled', 'completed'].includes(data.status)}
+                    canDelete={can('DOCUMENT_DELETE') && data.status === 'draft'}
+                />
+                <Card>
+                    <CardHeader title="Timeline" />
+                    {timeline.loading ? <div className="h-24 animate-pulse rounded-lg bg-slate-100" /> : <Timeline events={timeline.data?.array || []} />}
+                </Card>
+            </div>
         </div>
     );
 }

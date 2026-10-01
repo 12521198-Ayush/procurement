@@ -65,6 +65,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch {
                 localStorage.removeItem(USER_KEY);
             }
+
+            // Roles gain permissions over time; refresh them rather than trusting
+            // the copy cached at sign-in.
+            post<ProcurementUser>('/procurement/auth/me', {})
+                .then((fresh) => {
+                    if (!fresh?.user_id) return;
+                    localStorage.setItem(USER_KEY, JSON.stringify(fresh));
+                    setUser(fresh);
+                })
+                .catch(() => undefined);
         }
         setReady(true);
     }, []);

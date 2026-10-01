@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, LogOut, Menu, Search, User } from 'lucide-react';
+import { ChevronDown, LogOut, Menu, Search, User } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import NotificationBell from './NotificationBell';
 import PremiseSwitcher from './PremiseSwitcher';
 
 export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
@@ -48,14 +49,7 @@ export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void })
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-                <button
-                    type="button"
-                    className="relative grid h-9 w-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
-                    aria-label="Notifications"
-                >
-                    <Bell className="h-[18px] w-[18px]" />
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent-400 ring-2 ring-white" />
-                </button>
+                <NotificationBell />
 
                 <div className="relative" ref={menuRef}>
                     <button
