@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, Lock, Send } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, Lock, Paperclip, Send, Trash2, Upload } from 'lucide-react';
 import { post, TOKEN_KEY } from '@/lib/api';
+import { ACCEPTED_FILES, MAX_UPLOAD_BYTES, fileToBase64, formatBytes, humanize } from '@/lib/files';
 import { countdown, formatDateTime } from '@/lib/format';
 
 type Stage = 'loading' | 'invalid' | 'otp' | 'form' | 'done';
@@ -357,6 +358,8 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                                     </div>
                                 </Panel>
 
+                                <QuotationFiles />
+
                                 {error && <p className="text-[13px] text-rose-600">{error}</p>}
 
                                 <div className="flex justify-end">
@@ -404,6 +407,8 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                                     </div>
                                     {totals && <TotalsBox totals={totals} />}
                                 </Panel>
+
+                                <QuotationFiles />
 
                                 {error && <p className="text-[13px] text-rose-600">{error}</p>}
 
@@ -473,6 +478,138 @@ function Panel({ title, children }: { title?: string; children: React.ReactNode 
             {title && <h2 className="mb-4 text-[15px] font-semibold text-ink">{title}</h2>}
             {children}
         </div>
+    );
+}
+
+const FILE_TYPES = ['quotation_pdf', 'technical_quotation', 'commercial_quotation', 'supporting', 'other'];
+
+type VendorFile = { document_id: string; filename: string; original_filename?: string; category?: string; size_bytes: number; uploaded_at: string };
+
+/** Quotation attachments for the link session; the server ties them to this vendor and RFQ. */
+function QuotationFiles() {
+    const [files, setFiles] = useState<VendorFile[]>([]);
+    const [category, setCategory] = useState('quotation_pdf');
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const input = useRef<HTMLInputElement>(null);
+
+    async function load() {
+        try {
+            const res = await post<{ array: VendorFile[] }>('/procurement/vendor/documents/list', {});
+            setFiles(res.array);
+        } catch (err: any) {
+            setError(err.message);
+        }
+    }
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    async function upload(list: FileList | null) {
+        if (!list?.length) return;
+        setError(null);
+        setBusy('upload');
+        try {
+            for (const file of Array.from(list)) {
+                if (file.size > MAX_UPLOAD_BYTES) throw new Error(`${file.name} is larger than 10 MB`);
+                await post('/procurement/vendor/documents/upload', {
+                    filename: file.name,
+                    category,
+                    content_base64: await fileToBase64(file)
+                });
+            }
+            await load();
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    async function remove(id: string) {
+        setBusy(id);
+        setError(null);
+        try {
+            await post('/procurement/vendor/documents/delete', { document_id: id });
+            await load();
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    return (
+        <Panel title="Attachments">
+            <p className="mb-3 text-[13px] text-muted">
+                Attach your signed quotation, technical sheets or other supporting documents (PDF, images, Word, Excel; up to 10 MB each).
+                They stay sealed with your quotation until the buyer opens the bids.
+            </p>
+            <div className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-line bg-slate-50/60 p-3">
+                <label className="block min-w-[200px]">
+                    <span className="field-label">Document type</span>
+                    <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                        {FILE_TYPES.map((c) => (
+                            <option key={c} value={c}>
+                                {humanize(c)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <input
+                    ref={input}
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_FILES}
+                    className="hidden"
+                    onChange={(e) => {
+                        upload(e.target.files);
+                        e.target.value = '';
+                    }}
+                />
+                <button type="button" className="btn-primary" onClick={() => input.current?.click()} disabled={busy === 'upload'}>
+                    {busy === 'upload' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Upload files
+                </button>
+            </div>
+
+            {error && <p className="mt-3 text-[13px] text-rose-600">{error}</p>}
+
+            {files.length ? (
+                <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+                    {files.map((f) => (
+                        <li key={f.document_id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">
+                                    <FileText className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="truncate text-[13px] font-medium text-ink">{f.original_filename || f.filename}</p>
+                                    <p className="text-[11px] text-muted">
+                                        {humanize(f.category || 'other')} · {formatBytes(f.size_bytes)} · {formatDateTime(f.uploaded_at)}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-rose-600"
+                                onClick={() => remove(f.document_id)}
+                                disabled={busy === f.document_id}
+                                aria-label={`Remove ${f.filename}`}
+                            >
+                                {busy === f.document_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="mt-4 flex items-center gap-2 text-[13px] text-muted">
+                    <Paperclip className="h-4 w-4" />
+                    No files attached yet.
+                </p>
+            )}
+        </Panel>
     );
 }
 
