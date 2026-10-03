@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, Clock, FolderOpen, Lock, Send, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronRight, Clock, FolderOpen, Lock, Send, XCircle } from 'lucide-react';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import StatusPill from '@/components/ui/StatusPill';
 import { useToast } from '@/components/ui/Toast';
 import BidOpeningPanel from '@/components/procurement/BidOpeningPanel';
 import DocumentPanel from '@/components/procurement/DocumentPanel';
-import Timeline, { type TimelineEvent } from '@/components/procurement/Timeline';
+import QuotationDetailModal from '@/components/procurement/QuotationDetailModal';
+import { type TimelineEvent } from '@/components/procurement/Timeline';
 import { post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
@@ -23,6 +24,21 @@ const LIFECYCLE_LABELS: Record<string, string> = {
     completed: 'Completed'
 };
 
+// Only decision points are shown here; the full event log lives in the procurement file.
+const MILESTONE_EVENTS = new Set([
+    'RFQ_CREATED',
+    'RFQ_PUBLISHED',
+    'QUOTATION_SUBMITTED',
+    'QUOTATION_REVISED',
+    'RFQ_CLOSED',
+    'BID_OPENED',
+    'VENDOR_SELECTED',
+    'RFQ_CANCELLED',
+    'PO_CREATED',
+    'PO_SENT',
+    'PROCUREMENT_COMPLETED'
+]);
+
 export default function RfqDetailPage({ params }: { params: { id: string } }) {
     const { id } = params;
     const { can } = useAuth();
@@ -30,6 +46,7 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
     const { data, loading, error, reload } = useResource<any>('/procurement/rfq/detail', { rfq_id: id });
     const timeline = useResource<{ array: TimelineEvent[] }>('/procurement/lifecycle/events', { rfq_id: id });
     const [busy, setBusy] = useState(false);
+    const [viewing, setViewing] = useState<string | null>(null);
 
     async function act(endpoint: string, successMessage: string, extra: Record<string, unknown> = {}) {
         setBusy(true);
@@ -59,6 +76,9 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
     const stageIndex = Math.max(LIFECYCLE.indexOf(data.status), data.status === 'partially_responded' ? 1 : 0);
     const sealed = !!data.bid?.sealed;
     const isOpenForBids = ['sent', 'open', 'partially_responded', 'quotation_received'].includes(data.status) && !data.is_expired;
+    const canViewQuotes = responded > 0 && !sealed && can('QUOTATION_VIEW');
+    const compareHref = can('QUOTATION_COMPARE') ? `/quotations/compare/${data.rfq_id}` : undefined;
+    const milestones = (timeline.data?.array || []).filter((e) => MILESTONE_EVENTS.has(e.event_type));
 
     return (
         <div className="space-y-5">
@@ -172,6 +192,106 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
+                    <CardHeader
+                        title={`Vendor quotations (${responded}/${data.vendors.length} responded)`}
+                        className="px-5 pt-5"
+                        action={canViewQuotes && compareHref && responded > 1 ? <Link href={compareHref} className="btn-ghost h-8">Compare</Link> : undefined}
+                    />
+                    {data.vendors.length ? (
+                        <ul className="divide-y divide-line">
+                            {data.vendors.map((v: any) => {
+                                const clickable = canViewQuotes && v.has_responded && v.quotation_id;
+                                const row = (
+                                    <>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-[13px] font-medium text-ink">{v.company_name}</p>
+                                            <p className="truncate text-[11px] text-muted">
+                                                {v.has_responded
+                                                    ? `Quoted${v.revision_count > 0 ? ` · revised ${v.revision_count}x` : ''}`
+                                                    : v.invited_at
+                                                      ? `Invited ${formatDate(v.invited_at)}${v.last_opened_at ? ' · viewed' : ' · not yet viewed'}`
+                                                      : 'Not yet invited'}
+                                            </p>
+                                        </div>
+                                        {v.has_responded ? (
+                                            sealed ? (
+                                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-violet-700">
+                                                    <Lock className="h-3.5 w-3.5" /> Sealed
+                                                </span>
+                                            ) : (
+                                                <span className="shrink-0 text-[14px] font-semibold text-emerald-700">{formatMoney(v.grand_total_minor)}</span>
+                                            )
+                                        ) : (
+                                            <StatusPill status={v.invited_at ? 'pending' : 'draft'} />
+                                        )}
+                                        {clickable && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
+                                    </>
+                                );
+                                return (
+                                    <li key={v.rfq_vendor_id}>
+                                        {clickable ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewing(v.quotation_id)}
+                                                className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition hover:bg-slate-50"
+                                            >
+                                                {row}
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-3 px-5 py-3.5">{row}</div>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    ) : (
+                        <EmptyState title="No vendors selected" />
+                    )}
+                </Card>
+
+                <Card padded={false}>
+                    <CardHeader
+                        title="Key milestones"
+                        className="px-5 pt-5"
+                        action={
+                            <Link href={`/lifecycle?rfq=${data.rfq_id}`} className="text-[12px] font-medium text-brand-700 hover:underline">
+                                Full history
+                            </Link>
+                        }
+                    />
+                    {timeline.loading ? (
+                        <div className="m-5 h-24 animate-pulse rounded-lg bg-slate-100" />
+                    ) : milestones.length ? (
+                        <ol className="px-5 pb-5">
+                            {milestones.map((e, i) => (
+                                <li key={e.event_id} className="relative flex gap-3 pb-4 last:pb-0">
+                                    {i < milestones.length - 1 && <span className="absolute left-[5px] top-4 h-full w-px bg-line" aria-hidden />}
+                                    <span
+                                        className={`relative z-[1] mt-1 h-[11px] w-[11px] shrink-0 rounded-full ring-4 ring-white ${
+                                            /CANCELLED/.test(e.event_type) ? 'bg-rose-500' : i === milestones.length - 1 ? 'bg-brand-600' : 'bg-slate-300'
+                                        }`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[13px] font-medium text-ink">
+                                            {e.label}
+                                            {e.vendor_name && <span className="font-normal text-muted"> · {e.vendor_name}</span>}
+                                        </p>
+                                        <p className="text-[11px] text-muted">
+                                            {formatDateTime(e.ts)}
+                                            {e.amount_minor != null ? ` · ${formatMoney(e.amount_minor, e.currency || 'INR')}` : ''}
+                                        </p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ol>
+                    ) : (
+                        <EmptyState title="No activity yet" />
+                    )}
+                </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+                <Card padded={false} className="lg:col-span-2">
                     <CardHeader title={`Items (${data.items.length})`} className="px-5 pt-5" />
                     <div className="overflow-x-auto">
                         <table className="w-full">
@@ -197,57 +317,14 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                             </tbody>
                         </table>
                     </div>
-                </Card>
-
-                <Card padded={false}>
-                    <CardHeader title={`Vendors (${responded}/${data.vendors.length} responded)`} className="px-5 pt-5" />
-                    {data.vendors.length ? (
-                        <ul className="divide-y divide-line">
-                            {data.vendors.map((v: any) => (
-                                <li key={v.rfq_vendor_id} className="px-5 py-3.5">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="truncate text-[13px] font-medium text-ink">{v.company_name}</p>
-                                            <p className="truncate text-[11px] text-muted">{v.email}</p>
-                                        </div>
-                                        {v.has_responded ? (
-                                            sealed ? (
-                                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-violet-700">
-                                                    <Lock className="h-3.5 w-3.5" /> Sealed
-                                                </span>
-                                            ) : (
-                                                <span className="shrink-0 text-[12px] font-medium text-emerald-700">
-                                                    {formatMoney(v.grand_total_minor)}
-                                                </span>
-                                            )
-                                        ) : (
-                                            <StatusPill status={v.invited_at ? 'pending' : 'draft'} />
-                                        )}
-                                    </div>
-                                    <p className="mt-1 text-[11px] text-slate-400">
-                                        {v.invited_at ? `Invited ${formatDate(v.invited_at)}` : 'Not yet invited'}
-                                        {v.last_opened_at && ` · opened ${formatDate(v.last_opened_at)}`}
-                                        {v.revision_count > 0 && ` · revised ${v.revision_count}x`}
-                                    </p>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <EmptyState title="No vendors selected" />
+                    {data.terms_and_conditions && (
+                        <details className="border-t border-line px-5 py-3 text-[13px]">
+                            <summary className="cursor-pointer select-none font-medium text-slate-700">Terms and conditions</summary>
+                            <p className="mt-2 whitespace-pre-wrap leading-relaxed text-slate-600">{data.terms_and_conditions}</p>
+                        </details>
                     )}
                 </Card>
-            </div>
 
-            {data.terms_and_conditions && (
-                <Card>
-                    <CardHeader title="Terms and conditions" />
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600">
-                        {data.terms_and_conditions}
-                    </p>
-                </Card>
-            )}
-
-            <div className="grid gap-4 lg:grid-cols-2">
                 <DocumentPanel
                     entityType="rfq"
                     entityId={data.rfq_id}
@@ -256,11 +333,9 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                     canUpload={can('RFQ_EDIT') && can('DOCUMENT_UPLOAD') && !['cancelled', 'completed'].includes(data.status)}
                     canDelete={can('DOCUMENT_DELETE') && data.status === 'draft'}
                 />
-                <Card>
-                    <CardHeader title="Timeline" />
-                    {timeline.loading ? <div className="h-24 animate-pulse rounded-lg bg-slate-100" /> : <Timeline events={timeline.data?.array || []} />}
-                </Card>
             </div>
+
+            <QuotationDetailModal quotationId={viewing} compareHref={compareHref} onClose={() => setViewing(null)} />
         </div>
     );
 }
