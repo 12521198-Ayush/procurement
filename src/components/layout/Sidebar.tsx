@@ -193,7 +193,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                                     type="button"
                                     onClick={() => toggleGroup(group.id, open)}
                                     aria-expanded={open}
-                                    aria-controls={`nav-group-${group.id}`}
                                     className={clsx(
                                         'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider transition',
                                         groupActive ? 'text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'
@@ -211,7 +210,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                                     />
                                 </button>
                                 {open && (
-                                    <div id={`nav-group-${group.id}`} className="mt-0.5 space-y-0.5">
+                                    <div className="mt-0.5 space-y-0.5">
                                         {group.items.map((item) => renderLink(item, true))}
                                     </div>
                                 )}
