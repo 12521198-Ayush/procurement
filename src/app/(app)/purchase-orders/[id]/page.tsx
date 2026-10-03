@@ -102,6 +102,7 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
 
     // Arriving from a "Record payment" next-step link opens the payment form once.
     const autoPay = useRef(searchParams?.action === 'pay');
+    const tabsRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (!autoPay.current || !data) return;
         autoPay.current = false;
@@ -113,6 +114,7 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
         if (step.action === 'pay') return openPay();
         if (step.action === 'request_invoice') return void run('/procurement/tax-invoices/request', {}, 'Tax invoice requested from the vendor');
         setTab(new URLSearchParams(step.href?.split('?')[1] || '').get('tab') || 'overview');
+        tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     if (loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
@@ -256,7 +258,9 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
                 )}
             </Card>
 
-            <Tabs tabs={tabs} active={tab} onChange={setTab} />
+            <div ref={tabsRef} className="scroll-mt-4">
+                <Tabs tabs={tabs} active={tab} onChange={setTab} />
+            </div>
 
             {tab === 'overview' && (
                 <Card padded={false}>

@@ -60,38 +60,39 @@ export function LifecycleStepper({ stages, next }: { stages: Stage[]; next?: str
     );
 }
 
-const ACTOR: Record<string, string> = { buyer: 'Your action', vendor: 'Waiting on vendor', approver: 'Waiting on approver' };
+const WAITING_ON: Record<string, string> = { buyer: 'Waiting on buyer', vendor: 'Waiting on vendor', approver: 'Waiting on approver' };
 
 /**
  * What happens next, with a button to the place where it is done. `onLocal` runs the step in place
  * when its href points at `localPath` (the page already showing).
  */
-export function NextStepCard({ step, localPath, onLocal }: { step?: NextStep | null; localPath?: string; onLocal?: (step: NextStep) => void }) {
+export function NextStepCard({ step, localPath, onLocal, viewer = 'buyer' }: { step?: NextStep | null; localPath?: string; onLocal?: (step: NextStep) => void; viewer?: 'buyer' | 'vendor' }) {
     if (!step) return null;
     const complete = !step.stage && !step.actor;
+    const mine = step.actor === viewer;
     const local = !!(onLocal && localPath && step.href && step.href.split('?')[0] === localPath);
-    const Icon = complete ? PartyPopper : step.actor === 'buyer' ? ArrowRight : Hourglass;
+    const Icon = complete ? PartyPopper : mine ? ArrowRight : Hourglass;
     const button = 'btn-primary shrink-0';
 
     return (
         <div
             className={clsx(
                 'flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3',
-                complete ? 'border-emerald-200 bg-emerald-50' : step.actor === 'buyer' ? 'border-brand-200 bg-brand-50' : 'border-amber-200 bg-amber-50'
+                complete ? 'border-emerald-200 bg-emerald-50' : mine ? 'border-brand-200 bg-brand-50' : 'border-amber-200 bg-amber-50'
             )}
         >
             <div className="flex min-w-0 items-start gap-3">
                 <span
                     className={clsx(
                         'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full',
-                        complete ? 'bg-emerald-100 text-emerald-700' : step.actor === 'buyer' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700'
+                        complete ? 'bg-emerald-100 text-emerald-700' : mine ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700'
                     )}
                 >
                     <Icon className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                        Next step{step.actor && ` · ${ACTOR[step.actor]}`}
+                        Next step{step.actor && ` · ${mine ? 'Your action' : WAITING_ON[step.actor]}`}
                     </p>
                     <p className="text-[14px] font-semibold text-ink">{step.title}</p>
                     <p className="text-[12px] text-slate-600">

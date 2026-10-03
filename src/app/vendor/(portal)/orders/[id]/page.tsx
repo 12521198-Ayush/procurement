@@ -11,11 +11,56 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import DocumentPanel from '@/components/procurement/DocumentPanel';
 import Timeline from '@/components/procurement/Timeline';
+import { NextStepCard, type NextStep } from '@/components/procurement/Lifecycle';
 import { P, vendorDownload, vendorPost } from '@/lib/vendor-api';
 import { useVendorResource } from '@/lib/vendor-hooks';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 
 type Selected = { type: 'proforma_invoice' | 'dispatch' | 'tax_invoice' | 'payment_receipt'; id: string } | null;
+
+const TAB_FOR: Record<NonNullable<Selected>['type'], string> = { proforma_invoice: 'pi', dispatch: 'dispatch', tax_invoice: 'invoice', payment_receipt: 'payments' };
+
+/** The vendor's next action on this order (or what they are waiting on). */
+function vendorNextStep(data: any): NextStep {
+    const po = data.purchase_order;
+    const a = data.actions;
+    const href = `/vendor/orders/${po.po_id}`;
+    const s = (stage: string | null, actor: NextStep['actor'], title: string, description: string | null, cta: string | null = null, action: string | null = null): NextStep =>
+        ({ stage, actor, title, description, cta, href: cta ? href : null, action });
+
+    if (po.status === 'cancelled') return s('po', null, 'Order cancelled', po.cancel_reason || 'Nothing further to do on this order.');
+    if (po.status === 'vendor_rejected') return s('po', null, 'You rejected this order', po.vendor_remarks || null);
+    if (a.can_respond) return s('po', 'vendor', 'Accept or reject this purchase order', 'Check the items, delivery address and payment terms, then respond.', 'Accept order', 'accept');
+
+    const draftPi = data.proforma_invoices.find((p: any) => ['draft', 'rejected'].includes(p.status));
+    if (draftPi) {
+        return s('pi', 'vendor', `${draftPi.status === 'rejected' ? 'Revise and resubmit' : 'Submit'} proforma invoice ${draftPi.proforma_number}`,
+            draftPi.review_remarks ? `Buyer: ${draftPi.review_remarks}` : 'Attach the signed PI, then submit it for review.', 'Open proforma', `open:proforma_invoice:${draftPi.proforma_id}`);
+    }
+    const draftDispatch = data.dispatches.find((d: any) => d.status === 'draft');
+    if (draftDispatch) {
+        return s('dispatch', 'vendor', `Submit dispatch ${draftDispatch.dispatch_number}`, 'Upload the delivery challan (and LR / packing list), then submit to mark the goods as dispatched.',
+            'Open dispatch', `open:dispatch:${draftDispatch.dispatch_id}`);
+    }
+    if (a.can_dispatch) return s('dispatch', 'vendor', 'Dispatch the goods', 'Enter the quantities shipped and transport details, upload the delivery challan and submit.', 'Mark as dispatched', 'dispatch');
+
+    const inv = data.tax_invoices.find((t: any) => ['requested', 'draft', 'rejected'].includes(t.status));
+    if (inv) {
+        return s('invoice', 'vendor', inv.status === 'rejected' ? 'Correct and resubmit your tax invoice' : 'Upload your tax invoice',
+            inv.review_remarks ? `Buyer: ${inv.review_remarks}` : 'Fill in the invoice details, attach the invoice PDF and submit.', 'Open invoice', `open:tax_invoice:${inv.tax_invoice_id}`);
+    }
+    const receipt = data.payment_receipts.find((r: any) => r.status === 'issued');
+    if (receipt) return s('receipt', 'vendor', `Acknowledge payment receipt ${receipt.receipt_number}`, `${formatMoney(receipt.amount_minor, receipt.currency)} was paid to you.`, 'Open receipt', `open:payment_receipt:${receipt.receipt_id}`);
+
+    const reviewing = data.proforma_invoices.find((p: any) => ['submitted', 'under_review'].includes(p.status));
+    if (reviewing) return s('pi', 'buyer', `Buyer is reviewing ${reviewing.proforma_number}`, 'You will be notified when it is approved or rejected.');
+    const inTransit = data.dispatches.find((d: any) => ['dispatched', 'partially_received'].includes(d.status));
+    if (inTransit) return s('grn', 'buyer', `Waiting for the buyer to receive ${inTransit.dispatch_number}`, 'A goods receipt (GRN) is posted once the delivery is checked.');
+    if (po.remaining_minor > 0) return s('payment', 'buyer', 'Waiting for payment', `${formatMoney(po.remaining_minor, po.currency)} outstanding on this order.`);
+    if (data.tax_invoices.some((t: any) => t.status === 'received')) return s('invoice', 'buyer', 'Buyer is verifying your tax invoice', 'You will be notified when it is approved or rejected.');
+    if (a.can_invoice) return s('invoice', 'vendor', 'Raise your tax invoice', 'The order is paid; submit the GST tax invoice to close it.', 'Raise invoice', 'invoice');
+    return s(null, null, 'Nothing pending', 'Every step on this order is complete.');
+}
 
 export default function VendorOrderPage({ params }: { params: { id: string } }) {
     const toast = useToast();
@@ -60,6 +105,18 @@ export default function VendorOrderPage({ params }: { params: { id: string } }) 
 
     const sel = selected && findSelected(data, selected);
 
+    function runNextStep(step: NextStep) {
+        const action = step.action || '';
+        if (action === 'accept') return void run('orders/respond', { po_id: po.po_id, action: 'accept' }, 'Purchase order accepted');
+        if (action === 'dispatch') return setForm('dispatch');
+        if (action === 'invoice') return setForm('invoice');
+        if (action.startsWith('open:')) {
+            const [, type, id] = action.split(':') as [string, NonNullable<Selected>['type'], string];
+            setTab(TAB_FOR[type]);
+            setSelected({ type, id });
+        }
+    }
+
     return (
         <div className="space-y-5">
             <Link href="/vendor/orders" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Back to purchase orders</Link>
@@ -87,7 +144,7 @@ export default function VendorOrderPage({ params }: { params: { id: string } }) 
                             </>
                         )}
                         {a.can_raise_pi && <button type="button" className="btn-ghost" onClick={() => setForm('pi')}><FilePlus2 className="h-4 w-4" /> Proforma invoice</button>}
-                        {a.can_dispatch && <button type="button" className="btn-ghost" onClick={() => setForm('dispatch')}><Truck className="h-4 w-4" /> New dispatch</button>}
+                        {a.can_dispatch && <button type="button" className="btn-ghost" onClick={() => setForm('dispatch')}><Truck className="h-4 w-4" /> Dispatch goods</button>}
                         {a.can_invoice && <button type="button" className="btn-ghost" onClick={() => setForm('invoice')}><Receipt className="h-4 w-4" /> Tax invoice</button>}
                     </div>
                 </div>
@@ -96,6 +153,9 @@ export default function VendorOrderPage({ params }: { params: { id: string } }) 
                     <Fig label="Paid to you" value={formatMoney(po.paid_minor, po.currency)} tone="text-emerald-700" />
                     <Fig label="Outstanding" value={formatMoney(po.remaining_minor, po.currency)} tone="text-amber-700" />
                     <Fig label="Invoiced" value={formatMoney(po.invoiced_minor, po.currency)} />
+                </div>
+                <div className="mt-4">
+                    <NextStepCard step={vendorNextStep(data)} viewer="vendor" localPath={`/vendor/orders/${po.po_id}`} onLocal={runNextStep} />
                 </div>
             </Card>
 
