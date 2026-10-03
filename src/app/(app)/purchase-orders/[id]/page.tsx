@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Ban, CheckCircle2, Download, FileText, FolderOpen, PackageCheck, Paperclip, Receipt, Send } from 'lucide-react';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
@@ -11,7 +11,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import DocumentPanel from '@/components/procurement/DocumentPanel';
 import Timeline from '@/components/procurement/Timeline';
-import { LifecycleStepper, RelatedDocuments } from '@/components/procurement/Lifecycle';
+import { LifecycleStepper, NextStepCard, RelatedDocuments, type NextStep } from '@/components/procurement/Lifecycle';
 import { api, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
@@ -19,7 +19,7 @@ import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
 
 const PAYABLE_PI = ['approved', 'payment_pending', 'partially_paid'];
 
-export default function PurchaseOrderDetailPage({ params, searchParams }: { params: { id: string }; searchParams?: { tab?: string } }) {
+export default function PurchaseOrderDetailPage({ params, searchParams }: { params: { id: string }; searchParams?: { tab?: string; action?: string } }) {
     const { id } = params;
     const { can } = useAuth();
     const toast = useToast();
@@ -94,6 +94,26 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
     }
 
     const payablePis = useMemo(() => (data?.proforma_invoices || []).filter((p: any) => PAYABLE_PI.includes(p.status)), [data]);
+
+    function openPay() {
+        setPayPi(payablePis[0]?.proforma_id || '');
+        setPayOpen(true);
+    }
+
+    // Arriving from a "Record payment" next-step link opens the payment form once.
+    const autoPay = useRef(searchParams?.action === 'pay');
+    useEffect(() => {
+        if (!autoPay.current || !data) return;
+        autoPay.current = false;
+        setPayPi(payablePis[0]?.proforma_id || '');
+        setPayOpen(true);
+    }, [data, payablePis]);
+
+    function runNextStep(step: NextStep) {
+        if (step.action === 'pay') return openPay();
+        if (step.action === 'request_invoice') return void run('/procurement/tax-invoices/request', {}, 'Tax invoice requested from the vendor');
+        setTab(new URLSearchParams(step.href?.split('?')[1] || '').get('tab') || 'overview');
+    }
 
     if (loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
     if (error || !data) {
@@ -190,7 +210,7 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
                             </Link>
                         )}
                         {!fullyPaid && issued && can('PAYMENT_CREATE') && (
-                            <button type="button" className="btn-primary" onClick={() => { setPayPi(payablePis[0]?.proforma_id || ''); setPayOpen(true); }}>
+                            <button type="button" className="btn-primary" onClick={openPay}>
                                 <Receipt className="h-4 w-4" />
                                 Record payment
                             </button>
@@ -226,7 +246,12 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
 
                 {life.data?.stages && (
                     <div className="mt-5 border-t border-line pt-5">
-                        <LifecycleStepper stages={life.data.stages} />
+                        <LifecycleStepper stages={life.data.stages} next={life.data.next_step?.stage} />
+                    </div>
+                )}
+                {life.data?.next_step && (
+                    <div className="mt-4">
+                        <NextStepCard step={life.data.next_step} localPath={`/purchase-orders/${id}`} onLocal={runNextStep} />
                     </div>
                 )}
             </Card>

@@ -8,7 +8,7 @@ import StatusPill from '@/components/ui/StatusPill';
 import { Tabs } from '@/components/ui/Tabs';
 import BidOpeningPanel from '@/components/procurement/BidOpeningPanel';
 import Timeline from '@/components/procurement/Timeline';
-import { LifecycleStepper, RelatedDocuments } from '@/components/procurement/Lifecycle';
+import { LifecycleStepper, NextStepCard, RelatedDocuments } from '@/components/procurement/Lifecycle';
 import { post } from '@/lib/api';
 import { useResource } from '@/lib/hooks';
 import { humanize } from '@/lib/files';
@@ -89,8 +89,13 @@ export default function ProcurementFilePage({ searchParams }: { searchParams?: R
                     )}
                 </div>
                 <div className="mt-5 border-t border-line pt-5">
-                    <LifecycleStepper stages={data.stages} />
+                    <LifecycleStepper stages={data.stages} next={data.next_step?.stage} />
                 </div>
+                {data.next_step && (
+                    <div className="mt-4">
+                        <NextStepCard step={data.next_step} />
+                    </div>
+                )}
             </Card>
 
             {rfq && rfq.bid?.sealed && !['draft', 'cancelled'].includes(rfq.status) && <BidOpeningPanel rfqId={rfq.rfq_id} onOpened={reload} />}
