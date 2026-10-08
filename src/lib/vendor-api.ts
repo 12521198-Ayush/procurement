@@ -1,7 +1,7 @@
 'use client';
 
 import axios, { AxiosError } from 'axios';
-import type { ApiError } from './api';
+import { currentScreen, type ApiError } from './api';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4080';
 
@@ -16,6 +16,7 @@ vendorApi.interceptors.request.use((config) => {
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem(VENDOR_TOKEN_KEY);
         if (token) config.headers.Authorization = `Bearer ${token}`;
+        config.headers['x-screen'] = currentScreen();
     }
     return config;
 });
@@ -62,3 +63,8 @@ export function saveBlob(blob: Blob, filename: string) {
 }
 
 export const P = '/procurement/vendor/portal/';
+
+/** Records that the vendor opened a portal screen. Never blocks or surfaces an error. */
+export function trackVendorPageView(screen: string) {
+    vendorApi.post('/procurement/vendor/activity/page-view', { screen }).catch(() => undefined);
+}

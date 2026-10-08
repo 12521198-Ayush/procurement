@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { Bell, FileText, LayoutDashboard, LogOut, Menu, Scale, ShoppingCart, Wallet, X, type LucideIcon } from 'lucide-react';
-import { P, VENDOR_PROFILE_KEY, VENDOR_TOKEN_KEY } from '@/lib/vendor-api';
+import { P, VENDOR_PROFILE_KEY, VENDOR_TOKEN_KEY, trackVendorPageView } from '@/lib/vendor-api';
 import { useVendorResource } from '@/lib/vendor-hooks';
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
@@ -28,6 +28,10 @@ export default function VendorPortalLayout({ children }: { children: React.React
         if (!localStorage.getItem(VENDOR_TOKEN_KEY)) router.replace('/vendor/login');
         else setReady(true);
     }, [router]);
+
+    useEffect(() => {
+        if (ready) trackVendorPageView(pathname);
+    }, [ready, pathname]);
 
     const me = useVendorResource<any>(ready ? P + 'me' : null, {});
     const unread = useVendorResource<any>(ready ? P + 'notifications/list' : null, { limit: 1, path: pathname });

@@ -1,19 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
+import { trackPageView } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter();
+    const pathname = usePathname();
     const { user, ready } = useAuth();
     const [drawerOpen, setDrawerOpen] = useState(false);
 
     useEffect(() => {
         if (ready && !user) router.replace('/login');
     }, [ready, user, router]);
+
+    const signedInAs = user?.user_id;
+    useEffect(() => {
+        if (signedInAs) trackPageView(pathname);
+    }, [pathname, signedInAs]);
 
     if (!ready || !user) {
         return (

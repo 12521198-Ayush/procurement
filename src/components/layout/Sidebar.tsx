@@ -24,6 +24,7 @@ import {
     Quote,
     Receipt,
     Settings,
+    ShieldCheck,
     ShoppingCart,
     Tags,
     TrendingUp,
@@ -35,7 +36,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
-type NavItem = { href: string; label: string; icon: LucideIcon; multiPremiseOnly?: boolean };
+export const ADMIN_ROLE = 'Procurement Admin';
+
+type NavItem = { href: string; label: string; icon: LucideIcon; multiPremiseOnly?: boolean; adminOnly?: boolean };
 type NavGroup = { id: string; label: string; icon: LucideIcon; items: NavItem[] };
 
 /** Top-level links shown above the grouped sections. */
@@ -99,7 +102,8 @@ export const NAV_GROUPS: NavGroup[] = [
             { href: '/budget', label: 'Budget & Approvals', icon: PiggyBank },
             { href: '/categories', label: 'Categories', icon: Tags },
             { href: '/departments', label: 'Departments', icon: Building2 },
-            { href: '/settings', label: 'Settings', icon: Settings }
+            { href: '/settings', label: 'Settings', icon: Settings },
+            { href: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, adminOnly: true }
         ]
     }
 ];
@@ -121,8 +125,9 @@ function readOpenGroups(): Record<string, boolean> {
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     const pathname = usePathname();
-    const { isMultiPremise } = useAuth();
-    const visible = (item: NavItem) => !item.multiPremiseOnly || isMultiPremise;
+    const { isMultiPremise, user } = useAuth();
+    const isAdmin = user?.role === ADMIN_ROLE;
+    const visible = (item: NavItem) => (!item.multiPremiseOnly || isMultiPremise) && (!item.adminOnly || isAdmin);
     const items = NAV_ITEMS.filter(visible);
     const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter(visible) })).filter((g) => g.items.length);
     const activeGroupId = groups.find((g) => g.items.some((i) => isActivePath(pathname, i.href)))?.id ?? null;

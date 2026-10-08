@@ -17,9 +17,9 @@ export default function NotificationBell() {
     const [unread, setUnread] = useState(0);
     const ref = useRef<HTMLDivElement>(null);
 
-    async function load() {
+    async function load(background = false) {
         try {
-            const res = await post<{ array: Note[]; unread_count: number }>('/procurement/notifications/list', { limit: 12 });
+            const res = await post<{ array: Note[]; unread_count: number }>('/procurement/notifications/list', { limit: 12 }, { background });
             setRows(res.array);
             setUnread(res.unread_count);
         } catch {
@@ -29,7 +29,7 @@ export default function NotificationBell() {
 
     useEffect(() => {
         load();
-        const t = setInterval(load, 60000);
+        const t = setInterval(() => load(true), 60000);
         return () => clearInterval(t);
     }, [activePremiseId]);
 
@@ -77,7 +77,7 @@ export default function NotificationBell() {
                                     href={n.link || '/dashboard'}
                                     onClick={() => {
                                         setOpen(false);
-                                        if (!n.is_read) post('/procurement/notifications/mark-read', { notification_id: n.notification_id }).then(load).catch(() => undefined);
+                                        if (!n.is_read) post('/procurement/notifications/mark-read', { notification_id: n.notification_id }).then(() => load()).catch(() => undefined);
                                     }}
                                     className={`block px-4 py-2.5 hover:bg-slate-50 ${n.is_read ? '' : 'bg-brand-50/50'}`}
                                 >

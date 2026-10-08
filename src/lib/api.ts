@@ -33,10 +33,20 @@ export function getActivePremise(): string | null {
     return activePremiseId;
 }
 
+/**
+ * The screen a request was made from, for the audit trail. Secret link tokens in
+ * the path (vendor quotation / tax-invoice links) are masked before leaving the page.
+ */
+export function currentScreen(): string {
+    if (typeof window === 'undefined') return '';
+    return window.location.pathname.replace(/^(\/vendor\/(?:quotation|tax-invoice)\/)[^/]+/, '$1:token');
+}
+
 api.interceptors.request.use((config) => {
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem(TOKEN_KEY);
         if (token) config.headers.Authorization = `Bearer ${token}`;
+        config.headers['x-screen'] = currentScreen();
     }
 
     const premiseId = getActivePremise();
@@ -75,9 +85,14 @@ function toApiError(err: unknown): ApiError {
     return error;
 }
 
-export async function post<T = any>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+/** `background` marks timed polls so the audit trail is not flooded with them. */
+export async function post<T = any>(
+    path: string,
+    body: Record<string, unknown> = {},
+    options: { background?: boolean } = {}
+): Promise<T> {
     try {
-        const res = await api.post(path, body);
+        const res = await api.post(path, body, options.background ? { headers: { 'x-background': '1' } } : undefined);
         if (res.data?.error) throw { response: { data: res.data, status: res.status } };
         return res.data?.data as T;
     } catch (err) {
@@ -102,4 +117,9 @@ export async function get<T = any>(path: string, params: Record<string, unknown>
  */
 export function postCluster<T = any>(path: string, body: Record<string, unknown> = {}): Promise<T> {
     return post<T>(path, { ...body, premise_scope: 'cluster' });
+}
+
+/** Records that the user opened a screen. Never blocks or surfaces an error. */
+export function trackPageView(screen: string) {
+    post('/procurement/activity/page-view', { screen }).catch(() => undefined);
 }
