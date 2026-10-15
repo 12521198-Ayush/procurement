@@ -9,6 +9,9 @@
  *    audit-service downtime only delays delivery; event_id makes resends idempotent;
  *  - uploads use the original fetch with text/plain (no CORS preflight).
  *
+ * Auditing is opt-in per premise: nothing is recorded until audit-service reports
+ * the signed-in user's premise as enabled (the server enforces the same rule).
+ *
  * Kept identical in SERVIZING-NEXTJS, Resident_android and procurement-frontend.
  */
 
@@ -68,6 +71,8 @@ type AuditEvent = {
 
 type Batch = { tk: string | null; events: AuditEvent[] };
 
+type Gate = { token: string | null; premises: string[]; at: number };
+
 type CallInfo = {
     method: string;
     url: URL;
@@ -88,8 +93,13 @@ const MAX_QUEUED_EVENTS = 1000;
 const MAX_BACKOFF_MS = 5 * 60000;
 const IDENTITY_WAIT_MS = 10000;
 const PENDING_LOGIN_MS = 5 * 60000;
+const GATE_REFRESH_MS = 5 * 60000;
+const GATE_RETRY_MS = 60000;
+const GATE_TIMEOUT_MS = 10000;
+const MAX_HELD = 500;
 const STORAGE_PREFIX = '__audit_q_v1:';
 const PENDING_LOGIN_KEY = '__audit_pending_login';
+const GATE_KEY = '__audit_gate_v1:';
 
 const SECRET_KEY = /pass(word)?|otp|token|secret|authori[sz]ation|cookie|(^|_)hash$|_hash|^pin$|_pin$|cvv|card_?num|account_?num|api_?key|signature|private|credential|x-amz|csrf/i;
 const STATIC_FILE = /\.(js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|mp3|mp4|webm|wasm|webmanifest)$/i;
@@ -108,6 +118,8 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionId = '';
 let platform = 'web';
 let origFetch: typeof fetch | null = null;
+let gate: Gate | null = null;
+let gateLoading: string | null = null;
 
 function safe(fn: () => void) {
     try {
@@ -363,12 +375,90 @@ function identityReady() {
     return identityKnown || !!cfg?.resolveIdentity;
 }
 
+// ---------------------------------------------------------------- per-premise switch
+
+function currentToken() {
+    return currentIdentity().token || null;
+}
+
+function gateKnown() {
+    return !!gate && gate.token === currentToken();
+}
+
+function ready() {
+    return identityReady() && gateKnown();
+}
+
+/** Known to be off for the current session, so calls need not be inspected at all. */
+function knownDisabled() {
+    return ready() && !gate!.premises.length;
+}
+
+function allowed(id: AuditIdentity) {
+    if (!gate || !gate.premises.length) return false;
+    return !id.premise_id || gate.premises.indexOf(id.premise_id) >= 0;
+}
+
+function checkGate(force = false) {
+    if (!cfg || !origFetch || !identityReady()) return;
+    const tk = currentToken();
+    if (!force && gateKnown() && Date.now() - gate!.at < GATE_REFRESH_MS) return;
+    if (!tk) {
+        gate = { token: null, premises: [], at: Date.now() };
+        drain();
+        return;
+    }
+    if (gateLoading === tk) return;
+    gateLoading = tk;
+    void loadGate(tk);
+}
+
+async function loadGate(tk: string) {
+    let premises: string[] | null = null;
+    try {
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = setTimeout(() => ctrl?.abort(), GATE_TIMEOUT_MS);
+        const res = await origFetch!(cfg!.endpoint + '/audit/settings/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ token: tk }),
+            credentials: 'omit',
+            signal: ctrl?.signal
+        });
+        clearTimeout(timer);
+        if (res.ok) {
+            const json = await res.json();
+            const list = json?.data?.premise_ids;
+            if (Array.isArray(list)) premises = list.filter((p: unknown) => typeof p === 'string');
+        }
+    } catch {
+        premises = null;
+    }
+    if (gateLoading === tk) gateLoading = null;
+    const fresh = !!premises;
+    safe(() => {
+        if (premises) localStorage.setItem(GATE_KEY + cfg!.app, JSON.stringify(premises));
+        // audit-service unreachable: fall back to the last answer it gave.
+        else premises = JSON.parse(localStorage.getItem(GATE_KEY + cfg!.app) || '[]');
+    });
+    gate = { token: tk, premises: premises || [], at: fresh ? Date.now() : Date.now() - GATE_REFRESH_MS + GATE_RETRY_MS };
+    drain();
+}
+
+function drain() {
+    if (!ready() || !held.length) return;
+    const pending = held;
+    held = [];
+    pending.forEach((fn) => safe(fn));
+}
+
 /** `who` = null attributes the event to the session once it is known. */
 function record(kind: Kind, who: AuditIdentity | null, fields: Partial<AuditEvent> & { screen?: string }) {
     const ts = new Date().toISOString();
     const screen = fields.screen ?? currentScreen();
     const build = () => {
         const id = who || currentIdentity();
+        if (!allowed(id)) return;
         const e: AuditEvent = {
             event_id: randomId('e'),
             kind,
@@ -388,9 +478,11 @@ function record(kind: Kind, who: AuditIdentity | null, fields: Partial<AuditEven
         if (!e.response) delete e.response;
         enqueue(e, id.token || null);
     };
-    // Until the session is known, hold events so they are attributed to the user.
-    if (!identityReady()) held.push(build);
-    else build();
+    // Until the session and its premise switch are known, hold events so they are attributed correctly.
+    if (!ready()) {
+        if (held.length < MAX_HELD) held.push(build);
+        checkGate();
+    } else build();
 }
 
 function takePayload(batch: Batch) {
@@ -498,6 +590,9 @@ function headersToObject(h: unknown): Record<string, string> {
 function begin(method: string, rawUrl: string, headers: Record<string, string>, body: unknown): CallInfo | null {
     const url = new URL(rawUrl, window.location.href);
     if (shouldSkip(url, headers)) return null;
+    const auth = authKind(url);
+    // Sign-in calls are still watched while off: the new session's premise may have auditing on.
+    if (!auth && knownDisabled()) return null;
     const m = (method || 'GET').toUpperCase();
     const info: CallInfo = {
         method: m,
@@ -505,7 +600,7 @@ function begin(method: string, rawUrl: string, headers: Record<string, string>, 
         body: m === 'GET' || m === 'HEAD' ? null : capBody(readBody(body)),
         background: headers['x-background'] === '1',
         start: performance.now(),
-        auth: authKind(url),
+        auth,
         identity: identityReady() ? currentIdentity() : null,
         screen: currentScreen()
     };
@@ -703,7 +798,9 @@ export function initAuditTrail(config: AuditConfig) {
         onLocationChange();
 
         if (!config.resolveIdentity) setTimeout(() => releaseHeld(), IDENTITY_WAIT_MS);
+        else checkGate();
         setInterval(() => {
+            checkGate();
             checkPendingLogin();
             void flush();
         }, FLUSH_MS);
@@ -721,16 +818,22 @@ export function initAuditTrail(config: AuditConfig) {
 
 function releaseHeld() {
     identityKnown = true;
-    const pending = held;
-    held = [];
-    pending.forEach((fn) => safe(fn));
+    checkGate();
+    drain();
 }
 
 /** Push-style identity for session-provider apps. Pass `{}` when signed out. */
 export function setAuditIdentity(next: AuditIdentity) {
     safe(() => {
         identity = { ...next };
-        if (!identityKnown) releaseHeld();
+        identityKnown = true;
+        checkGate();
+        drain();
         checkPendingLogin();
     });
+}
+
+/** Re-reads the premise switch now, e.g. right after an admin changes it. */
+export function refreshAuditSettings() {
+    safe(() => checkGate(true));
 }
