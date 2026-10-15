@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/components/ui/Toast';
+import AuditTracker from '@/components/AuditTracker';
 
 export const metadata: Metadata = {
     title: 'ProcurePro — Procurement Management',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <html lang="en">
             <body>
+                <AuditTracker />
                 <ToastProvider>
                     <AuthProvider>{children}</AuthProvider>
                 </ToastProvider>
