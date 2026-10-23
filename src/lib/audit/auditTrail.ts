@@ -12,10 +12,10 @@
  * Auditing is opt-in per premise: nothing is recorded until audit-service reports
  * the signed-in user's premise as enabled (the server enforces the same rule).
  *
- * Kept identical in SERVIZING-NEXTJS, Resident_android and procurement-frontend.
+ * Kept identical in SERVIZING-NEXTJS, Resident_android, procurement-frontend and guard.
  */
 
-export type AuditApp = 'admin-panel' | 'resident-app' | 'procurement';
+export type AuditApp = 'admin-panel' | 'resident-app' | 'procurement' | 'guard-app';
 
 export type AuditIdentity = {
     token?: string | null;
