@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Award, Check, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, Check, Handshake, ShoppingCart, Timer } from 'lucide-react';
 import { Card, EmptyState } from '@/components/ui/Card';
 import Modal, { SubmitButton } from '@/components/ui/Modal';
 import StatusPill from '@/components/ui/StatusPill';
@@ -14,7 +14,15 @@ import BidOpeningPanel from '@/components/procurement/BidOpeningPanel';
 import { post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
+
+const TERMS = [
+    { value: 'price', label: 'Price' },
+    { value: 'delivery', label: 'Delivery' },
+    { value: 'payment_terms', label: 'Payment terms' },
+    { value: 'warranty', label: 'Warranty' },
+    { value: 'validity', label: 'Validity' }
+];
 
 const REASONS = [
     { value: 'Best Price', label: 'Best Price' },
@@ -35,7 +43,45 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
     const { data, loading, error, reload } = useResource<any>(sealed === false ? '/procurement/quotations/compare' : null, { rfq_id: rfqId });
     const [selecting, setSelecting] = useState<any>(null);
     const [creatingPo, setCreatingPo] = useState(false);
+    const [negotiating, setNegotiating] = useState(false);
+    const [roundVendors, setRoundVendors] = useState<string[]>([]);
+    const [roundTerms, setRoundTerms] = useState<string[]>(TERMS.map((t) => t.value));
     const [busy, setBusy] = useState(false);
+
+    async function startRound(form: FormData) {
+        setBusy(true);
+        try {
+            const date = String(form.get('deadline_date') || '');
+            const time = String(form.get('deadline_time') || '17:00');
+            const res = await post('/procurement/negotiation/start', {
+                rfq_id: rfqId,
+                vendor_ids: roundVendors,
+                deadline: date ? new Date(`${date}T${time}`).toISOString() : undefined,
+                negotiable_terms: roundTerms,
+                message: form.get('message') || undefined
+            });
+            toast.success(`Round ${res.round_no} started - ${res.vendors.length} vendor(s) invited to revise`);
+            setNegotiating(false);
+            reload();
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function closeRound() {
+        setBusy(true);
+        try {
+            await post('/procurement/negotiation/close', { rfq_id: rfqId });
+            toast.success('Negotiation round closed');
+            reload();
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setBusy(false);
+        }
+    }
 
     async function createPurchaseOrder(form: FormData) {
         const selected = data.quotations.find((q: any) => q.status === 'selected');
@@ -50,7 +96,7 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
             });
             toast.success(
                 po.status === 'pending_approval'
-                    ? `${po.po_number} created and sent for budget approval`
+                    ? `${po.po_number} exceeds its budget and is waiting for a Procurement Admin's approval`
                     : `${po.po_number} created. Review it and send it to the vendor.`
             );
             router.push(`/purchase-orders/${po.po_id}`);
@@ -108,6 +154,10 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
 
     const { rfq, rfq_items, quotations, purchase_order } = data;
     const selectedQuote = quotations.find((q: any) => q.status === 'selected');
+    const negotiation = data.negotiation ?? { open_round: null, rounds: [], can_start: false };
+    const openRound = negotiation.open_round;
+    const roundEntry = (q: any) => openRound?.vendors?.find((v: any) => v.vendor_id === q.vendor_id);
+    const canNegotiate = can('BID_NEGOTIATE');
 
     if (!quotations.length) {
         return (
@@ -130,7 +180,44 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
             <PageHeader
                 title={`Compare quotations — ${rfq.rfq_number}`}
                 subtitle={`${quotations.length} of your invited vendors responded. Pick the one that suits you, not just the cheapest.`}
+                action={
+                    negotiation.can_start &&
+                    canNegotiate && (
+                        <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => {
+                                setRoundVendors(quotations.filter((q: any) => q.status === 'submitted').map((q: any) => q.vendor_id));
+                                setNegotiating(true);
+                            }}
+                        >
+                            <Handshake className="h-4 w-4" />
+                            {`Negotiate - start round ${(rfq.current_round || 1) + 1}`}
+                        </button>
+                    )
+                }
             />
+
+            {openRound && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-[13px] text-violet-900">
+                    <div className="flex items-start gap-2">
+                        <Timer className="mt-0.5 h-4 w-4" />
+                        <div>
+                            <p className="font-medium">
+                                Negotiation round {openRound.round_no} is open until {formatDateTime(openRound.deadline)}
+                            </p>
+                            <p className="mt-0.5">
+                                {openRound.vendors.filter((v: any) => v.status === 'responded').length} of {openRound.vendors.length} shortlisted vendor(s) have revised their offer. A vendor can be selected once the round closes.
+                            </p>
+                        </div>
+                    </div>
+                    {canNegotiate && (
+                        <button type="button" className="btn-ghost h-9 bg-white" onClick={closeRound} disabled={busy}>
+                            Close round now
+                        </button>
+                    )}
+                </div>
+            )}
 
             {rfq.selected_vendor_id && (
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
@@ -171,10 +258,16 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                                             </span>
                                             <span className="text-[11px] font-normal normal-case text-muted">
                                                 {q.quotation_number}
+                                                {(q.round_no || 1) > 1 ? ` · round ${q.round_no} offer` : ''}
                                             </span>
                                             {q.is_lowest && (
                                                 <span className="inline-flex w-fit rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium normal-case text-emerald-700">
                                                     Lowest total
+                                                </span>
+                                            )}
+                                            {roundEntry(q) && (
+                                                <span className="w-fit">
+                                                    <StatusPill status={roundEntry(q).status} className="px-1.5 py-0.5 text-[10px] normal-case" />
                                                 </span>
                                             )}
                                         </div>
@@ -192,6 +285,12 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                                 {quotations.map((q: any) => (
                                     <td key={q.quotation_id} className="td text-[14px] font-semibold text-ink">
                                         {formatMoney(q.grand_total_minor, q.currency)}
+                                        {q.original_total_minor != null && q.original_total_minor !== q.grand_total_minor && (
+                                            <span className="block text-[11px] font-normal text-emerald-700">
+                                                was {formatMoney(q.original_total_minor, q.currency)} (
+                                                {(((q.original_total_minor - q.grand_total_minor) / q.original_total_minor) * 100).toFixed(1)}% saved)
+                                            </span>
+                                        )}
                                     </td>
                                 ))}
                             </tr>
@@ -215,7 +314,7 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                                 />
                             ))}
 
-                            {!rfq.selected_vendor_id && can('VENDOR_SELECT') && (
+                            {!rfq.selected_vendor_id && !openRound && can('VENDOR_SELECT') && (
                                 <tr>
                                     <td className="td sticky left-0 z-10 bg-white" />
                                     {quotations.map((q: any) => (
@@ -232,6 +331,141 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                     </table>
                 </div>
             </Card>
+
+            {negotiation.rounds.length > 0 && (
+                <Card className="mt-5">
+                    <h3 className="mb-3 text-[14px] font-semibold text-ink">Negotiation history</h3>
+                    <div className="space-y-4">
+                        {negotiation.rounds.map((r: any) => (
+                            <div key={r.round_id} className="overflow-x-auto rounded-lg border border-line">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-slate-50 px-4 py-2.5 text-[13px]">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-medium text-ink">Round {r.round_no}</span>
+                                        <StatusPill status={r.status} />
+                                    </div>
+                                    <span className="text-muted">
+                                        Started {formatDateTime(r.created_at)} by {r.created_by_name} · deadline {formatDateTime(r.deadline)}
+                                        {r.closed_at ? ` · closed ${formatDateTime(r.closed_at)} (${r.close_reason})` : ''}
+                                    </span>
+                                </div>
+                                {r.message && <p className="px-4 pt-2.5 text-[12px] text-slate-600">Message to vendors: {r.message}</p>}
+                                <table className="w-full">
+                                    <thead>
+                                        <tr>
+                                            <th className="th">Vendor</th>
+                                            <th className="th text-right">Before</th>
+                                            <th className="th text-right">Revised</th>
+                                            <th className="th text-right">Change</th>
+                                            <th className="th">Response</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-line">
+                                        {r.vendors.map((v: any) => (
+                                            <tr key={v.vendor_id}>
+                                                <td className="td font-medium text-ink">{v.vendor_name}</td>
+                                                <td className="td text-right">{formatMoney(v.previous_total_minor, r.currency)}</td>
+                                                <td className="td text-right">{v.revised_total_minor != null ? formatMoney(v.revised_total_minor, r.currency) : '—'}</td>
+                                                <td className="td text-right">
+                                                    {v.revised_total_minor != null ? (
+                                                        <span className={v.revised_total_minor <= v.previous_total_minor ? 'text-emerald-700' : 'text-rose-600'}>
+                                                            {formatMoney(v.revised_total_minor - v.previous_total_minor, r.currency)}
+                                                        </span>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </td>
+                                                <td className="td">
+                                                    <StatusPill status={v.status} />
+                                                    {v.responded_at && <span className="ml-2 text-[11px] text-muted">{formatDateTime(v.responded_at)}</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            )}
+
+            <Modal
+                open={negotiating}
+                onClose={() => setNegotiating(false)}
+                size="lg"
+                title={`Start negotiation round ${(rfq.current_round || 1) + 1}`}
+                description="Shortlisted vendors get a fresh link (and a portal notification) to revise their offer by the deadline. Silent vendors keep their current offer."
+                footer={
+                    <>
+                        <button type="button" className="btn-ghost" onClick={() => setNegotiating(false)}>
+                            Cancel
+                        </button>
+                        <SubmitButton form="round-form" type="submit" busy={busy} disabled={!roundVendors.length || !roundTerms.length}>
+                            Invite {roundVendors.length} vendor(s)
+                        </SubmitButton>
+                    </>
+                }
+            >
+                <form
+                    id="round-form"
+                    className="space-y-4"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        startRound(new FormData(e.currentTarget));
+                    }}
+                >
+                    <div>
+                        <p className="field-label">Vendors in this round</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            {quotations
+                                .filter((q: any) => q.status === 'submitted')
+                                .map((q: any) => {
+                                    const checked = roundVendors.includes(q.vendor_id);
+                                    return (
+                                        <label key={q.vendor_id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${checked ? 'border-brand-500 bg-brand-50/40' : 'border-line hover:bg-slate-50'}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => setRoundVendors(e.target.checked ? [...roundVendors, q.vendor_id] : roundVendors.filter((x) => x !== q.vendor_id))}
+                                                className="mt-0.5 h-4 w-4 rounded border-line text-brand-600"
+                                            />
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-[13px] font-medium text-ink">{q.vendor_name}</span>
+                                                <span className="block text-[12px] text-muted">Current offer {formatMoney(q.grand_total_minor, q.currency)}</span>
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                        </div>
+                    </div>
+                    <div>
+                        <p className="field-label">Terms open for revision</p>
+                        <div className="flex flex-wrap gap-3">
+                            {TERMS.map((t) => (
+                                <label key={t.value} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={roundTerms.includes(t.value)}
+                                        onChange={(e) => setRoundTerms(e.target.checked ? [...roundTerms, t.value] : roundTerms.filter((x) => x !== t.value))}
+                                        className="h-4 w-4 rounded border-line text-brand-600"
+                                    />
+                                    {t.label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Respond by (date)" required>
+                            <Input type="date" name="deadline_date" required min={new Date().toISOString().slice(0, 10)} />
+                        </Field>
+                        <Field label="Respond by (time)" required hint="Enforced on the server.">
+                            <Input type="time" name="deadline_time" defaultValue="17:00" required />
+                        </Field>
+                    </div>
+                    <Field label="Message to vendors" hint="Included in the email. Do not disclose competitors' prices.">
+                        <Textarea name="message" rows={3} placeholder="e.g. Please share your best and final price and earliest delivery date." />
+                    </Field>
+                </form>
+            </Modal>
 
             <Modal
                 open={!!selecting}
@@ -320,6 +554,7 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                             </div>
                         </div>
                     )}
+                    {selectedQuote && creatingPo && <BudgetPreview rfqId={rfqId} amountMinor={selectedQuote.grand_total_minor} />}
                     <Field label="Delivery address">
                         <Textarea name="delivery_address" rows={2} defaultValue={rfq.delivery_location || ''} />
                     </Field>
@@ -341,6 +576,29 @@ export default function CompareQuotationsPage({ params }: { params: { rfqId: str
                 </form>
             </Modal>
         </div>
+    );
+}
+
+function BudgetPreview({ rfqId, amountMinor }: { rfqId: string; amountMinor: number }) {
+    const { data } = useResource<any>('/procurement/budgets/check', { rfq_id: rfqId, amount: (amountMinor / 100).toFixed(2) });
+    if (!data) return null;
+    if (data.status === 'no_budget') {
+        return <p className="rounded-lg bg-slate-50 px-4 py-3 text-[12px] text-muted">No budget is allocated for this purchase.</p>;
+    }
+    if (data.status === 'exceeded') {
+        return (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                <p className="font-medium">Exceeds the {data.budget_label} budget by {formatMoney(data.shortfall_minor)}</p>
+                <p className="mt-0.5 text-[12px]">
+                    Remaining {formatMoney(data.remaining_minor)} of {formatMoney(data.allocated_minor)}. The order will be held until a Procurement Admin approves it; approval raises the budget by the shortfall.
+                </p>
+            </div>
+        );
+    }
+    return (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[12px] text-emerald-800">
+            Within the {data.budget_label} budget - {formatMoney(data.remaining_minor)} remaining before this order.
+        </p>
     );
 }
 

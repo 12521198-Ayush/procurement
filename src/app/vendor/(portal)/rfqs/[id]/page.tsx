@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Award, Clock, Download, Loader2, Lock, Save, Send } from 'lucide-react';
+import { ArrowLeft, Award, Clock, Download, Handshake, Loader2, Lock, Save, Send } from 'lucide-react';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
 import StatusPill from '@/components/ui/StatusPill';
@@ -80,7 +80,8 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
     if (error || !data) return <Card><EmptyState title="Could not load this RFQ" hint={error ?? undefined} /></Card>;
 
     const { rfq, quotation } = data;
-    const timer = countdown(rfq.expires_at);
+    const negotiation = data.negotiation;
+    const timer = countdown(data.submission_deadline ?? rfq.expires_at);
     const isRevision = quotation && quotation.status === 'submitted';
 
     return (
@@ -119,6 +120,18 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
                         {data.purchase_order && <Link href={`/vendor/orders/${data.purchase_order.po_id}`} className="font-medium underline">Open {data.purchase_order.po_number} →</Link>}
                     </div>
                 )}
+                {negotiation && (
+                    <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-[13px] text-violet-900">
+                        <p className="flex items-center gap-2 font-medium">
+                            <Handshake className="h-4 w-4" /> Negotiation round {negotiation.round_no}: you have been shortlisted
+                        </p>
+                        <p className="mt-1">
+                            Submit one revised offer by {formatDateTime(negotiation.deadline)}. Open for revision: {negotiation.negotiable_terms.map((t: string) => t.replace(/_/g, ' ')).join(', ')}.
+                            {negotiation.previous_total_minor != null && <> Your current offer is {formatMoney(negotiation.previous_total_minor, rfq.currency)}.</>} If you do not respond, it stands.
+                        </p>
+                        {negotiation.message && <p className="mt-1 italic">&ldquo;{negotiation.message}&rdquo;</p>}
+                    </div>
+                )}
                 {!data.submission_open && quotation && quotation.status === 'submitted' && (
                     <p className="mt-4 flex items-center gap-2 rounded-lg bg-violet-50 px-4 py-3 text-[13px] text-violet-800">
                         <Lock className="h-4 w-4" /> Submissions are closed. Your quotation stays sealed until the buyer opens bids{rfq.bids_opened ? ' (bids have been opened and are under evaluation).' : '.'}
@@ -127,7 +140,7 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
             </Card>
 
             <Card padded={false}>
-                <CardHeader title={data.can_edit ? (isRevision ? 'Revise your quotation' : 'Your prices') : 'Items'} className="px-5 pt-5" />
+                <CardHeader title={data.can_edit ? (negotiation ? `Your revised offer - round ${negotiation.round_no}` : isRevision ? 'Revise your quotation' : 'Your prices') : 'Items'} className="px-5 pt-5" />
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[720px]">
                         <thead className="border-y border-line bg-slate-50/80">
@@ -193,13 +206,13 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
                 )}
                 {data.can_edit && (
                     <div className="flex justify-end gap-2 border-t border-line px-5 py-4">
-                        {!isRevision && (
+                        {!isRevision && !negotiation && (
                             <button type="button" className="btn-ghost" onClick={() => save(false)} disabled={!!busy}>
                                 {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save draft
                             </button>
                         )}
                         <button type="button" className="btn-primary" onClick={() => setConfirm(true)} disabled={!!busy || !lines.every((l) => l.unit_price)}>
-                            <Send className="h-4 w-4" /> {isRevision ? 'Submit revision' : 'Submit quotation'}
+                            <Send className="h-4 w-4" /> {negotiation ? 'Submit revised offer' : isRevision ? 'Submit revision' : 'Submit quotation'}
                         </button>
                     </div>
                 )}
@@ -225,7 +238,7 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
                         <ul className="divide-y divide-line text-[13px]">
                             {data.revisions.map((r: any) => (
                                 <li key={r.version} className="flex items-center justify-between py-2">
-                                    <span>Version {r.version} · submitted {formatDateTime(r.submitted_at)}</span>
+                                    <span>Version {r.version}{r.round_no > 1 ? ` (round ${r.round_no})` : ''} · submitted {formatDateTime(r.submitted_at)}</span>
                                     <span className="text-muted">{formatMoney(r.grand_total_minor, rfq.currency)} · superseded {formatDateTime(r.superseded_at)}</span>
                                 </li>
                             ))}
@@ -241,7 +254,7 @@ export default function VendorRfqDetailPage({ params }: { params: { id: string }
             </div>
 
             <Modal open={confirm} onClose={() => setConfirm(false)} title={isRevision ? 'Submit this revision?' : 'Submit your quotation?'} size="sm"
-                description={rfq.allow_quotation_revision ? 'You can revise it until the RFQ closes; every version is kept.' : 'Once submitted it is final and cannot be changed.'}
+                description={negotiation ? `You can send one revised offer in round ${negotiation.round_no}; your previous offer is kept on record.` : rfq.allow_quotation_revision ? 'You can revise it until the RFQ closes; every version is kept.' : 'Once submitted it is final and cannot be changed.'}
                 footer={<><button type="button" className="btn-ghost" onClick={() => setConfirm(false)}>Cancel</button><button type="button" className="btn-primary" onClick={() => save(true)} disabled={!!busy}>{busy === 'submit' && <Loader2 className="h-4 w-4 animate-spin" />}Submit</button></>}
             >
                 <p className="text-[13px] text-slate-600">Grand total: <span className="font-semibold text-ink">{formatMoney(totals?.grand_total_minor, rfq.currency)}</span></p>

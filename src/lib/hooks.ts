@@ -106,14 +106,28 @@ export function useDebounced<T>(value: T, delay = 350) {
     return debounced;
 }
 
-/** Options for a `<Select>`, loaded from a list endpoint. */
-export function useOptions(endpoint: string, idKey: string, labelKey = 'name') {
+/**
+ * Options for a `<Select>`, loaded from a list endpoint. Master lists only return
+ * the active entries the signed-in user has been given. Pass `filters: null` to
+ * skip loading (e.g. subcategories before a category is chosen).
+ */
+export function useOptions(
+    endpoint: string,
+    idKey: string,
+    labelKey = 'name',
+    filters: Record<string, unknown> | null = {}
+) {
     const { activePremiseId } = useAuth();
     const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+    const key = filters === null ? null : JSON.stringify(filters);
 
     useEffect(() => {
+        if (key === null) {
+            setOptions([]);
+            return;
+        }
         let cancelled = false;
-        post<ListResult<any>>(endpoint, { limit: 200, is_active: 'yes' })
+        post<ListResult<any>>(endpoint, { limit: 200, is_active: 'yes', ...JSON.parse(key) })
             .then((res) => {
                 if (cancelled) return;
                 setOptions((res.array || []).map((r) => ({ value: r[idKey], label: r[labelKey] })));
@@ -122,7 +136,7 @@ export function useOptions(endpoint: string, idKey: string, labelKey = 'name') {
         return () => {
             cancelled = true;
         };
-    }, [endpoint, idKey, labelKey, activePremiseId]);
+    }, [endpoint, idKey, labelKey, key, activePremiseId]);
 
     return options;
 }

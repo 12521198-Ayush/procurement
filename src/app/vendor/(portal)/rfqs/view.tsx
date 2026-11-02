@@ -18,6 +18,7 @@ const TABS = [
     { value: 'new', label: 'New' },
     { value: 'in_progress', label: 'Draft' },
     { value: 'submitted', label: 'Submitted' },
+    { value: 'negotiation', label: 'Negotiation' },
     { value: 'under_evaluation', label: 'Under evaluation' },
     { value: 'awarded', label: 'Awarded' },
     { value: 'not_selected', label: 'Not selected' },

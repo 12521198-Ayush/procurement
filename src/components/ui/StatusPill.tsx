@@ -64,7 +64,17 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
     partially_accepted: 'amber',
     not_selected: 'slate',
     closed: 'slate',
-    vendor_rejected: 'red'
+    vendor_rejected: 'red',
+
+    // Negotiation, budget approval, inspection
+    negotiation: 'violet',
+    responded: 'green',
+    no_response: 'slate',
+    pending_approval: 'amber',
+    not_received: 'slate',
+    created: 'blue',
+    manual_update: 'amber',
+    approval_increase: 'violet'
 };
 
 function label(status: string) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ClipboardCheck, FolderOpen, PackageCheck, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, FolderOpen, PackageCheck, Upload, XCircle } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import DataTable, { type Column } from '@/components/ui/DataTable';
 import Modal, { SubmitButton } from '@/components/ui/Modal';
@@ -264,9 +264,10 @@ function GrnModal({ id, onClose, onChanged }: { id: string; onClose: () => void;
             setData(res);
             const g = res.goods_receipt;
             const init: Record<string, { accepted: string; rejected: string; remarks: string }> = {};
+            // Uninspected lines start blank so every item gets a deliberate decision.
             (g.items || []).forEach((l: any) => (init[l.po_item_id] = {
-                accepted: String(l.accepted_quantity ?? l.received_quantity),
-                rejected: String(l.rejected_quantity ?? 0),
+                accepted: l.accepted_quantity != null ? String(l.accepted_quantity) : '',
+                rejected: l.rejected_quantity != null ? String(l.rejected_quantity) : '',
                 remarks: l.remarks || ''
             }));
             setInspect(init);
@@ -299,31 +300,55 @@ function GrnModal({ id, onClose, onChanged }: { id: string; onClose: () => void;
     const g = data?.goods_receipt;
     const editable = g && ['draft', 'inspection', 'accepted', 'partially_accepted', 'rejected'].includes(g.status);
     const inspected = g && ['accepted', 'partially_accepted', 'rejected'].includes(g.status);
+    const blockers: string[] = data?.post_blockers ?? [];
+    const receivedLines = (g?.items ?? []).filter((l: any) => l.received_quantity > 0);
+    const lineIssue = (l: any) => {
+        const v = inspect[l.po_item_id];
+        if (!(l.received_quantity > 0)) return null;
+        if (!v || v.accepted === '' || v.rejected === '') return 'Enter accepted and rejected quantities';
+        if (Number(v.accepted) + Number(v.rejected) !== Number(l.received_quantity)) return `Must add up to ${l.received_quantity}`;
+        return null;
+    };
+    const pendingLines = receivedLines.filter((l: any) => lineIssue(l));
+
+    function saveInspection() {
+        if (pendingLines.length) {
+            toast.error(`Inspect every item first: ${pendingLines.map((l: any) => l.name).join(', ')}`);
+            return;
+        }
+        act('/procurement/grn/inspect', {
+            inspection_remarks: remarks,
+            items: g.items.map((l: any) => ({
+                po_item_id: l.po_item_id,
+                accepted_quantity: l.received_quantity > 0 ? Number(inspect[l.po_item_id]?.accepted) : 0,
+                rejected_quantity: l.received_quantity > 0 ? Number(inspect[l.po_item_id]?.rejected) : 0,
+                remarks: inspect[l.po_item_id]?.remarks || null
+            }))
+        }, 'Inspection recorded');
+    }
 
     return (
         <Modal open onClose={onClose} size="xl" title={g ? `GRN ${g.grn_number}` : 'Goods receipt'} description={g ? `${g.vendor_name} · ${g.po_number}${g.dispatch_number ? ' · ' + g.dispatch_number : ''}` : undefined}
             footer={g && editable && can('GRN_CREATE') ? (
                 <>
-                    {['draft', 'inspection'].includes(g.status) && (
+                    {editable && (
                         <button type="button" className="btn-ghost text-rose-600" onClick={() => setCancelling(true)} disabled={busy}><XCircle className="h-4 w-4" /> Cancel GRN</button>
                     )}
                     {g.status === 'draft' && (
                         <button type="button" className="btn-ghost" onClick={() => act('/procurement/grn/start-inspection', {}, 'Inspection started')} disabled={busy}>Start inspection</button>
                     )}
-                    <button
-                        type="button"
-                        className="btn-ghost"
-                        disabled={busy}
-                        onClick={() => act('/procurement/grn/inspect', {
-                            inspection_remarks: remarks,
-                            items: g.items.map((l: any) => ({ po_item_id: l.po_item_id, accepted_quantity: Number(inspect[l.po_item_id]?.accepted || 0), rejected_quantity: Number(inspect[l.po_item_id]?.rejected || 0), remarks: inspect[l.po_item_id]?.remarks || null }))
-                        }, 'Inspection recorded')}
-                    >
-                        <ClipboardCheck className="h-4 w-4" /> Save inspection
+                    <button type="button" className="btn-ghost" disabled={busy} onClick={saveInspection}>
+                        <ClipboardCheck className="h-4 w-4" /> {inspected ? 'Re-inspect' : 'Save inspection'}
                     </button>
                     {inspected && can('GRN_POST') && (
-                        <button type="button" className="btn-primary" onClick={() => act('/procurement/grn/post', {}, 'GRN posted - PO, dispatch and stock updated')} disabled={busy}>
-                            <Upload className="h-4 w-4" /> Post GRN
+                        <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => act('/procurement/grn/post', {}, 'GRN generated - PO, dispatch and stock updated')}
+                            disabled={busy || blockers.length > 0}
+                            title={blockers.length ? 'Every item must be inspected and accepted first' : undefined}
+                        >
+                            <Upload className="h-4 w-4" /> Generate GRN
                         </button>
                     )}
                 </>
@@ -340,6 +365,22 @@ function GrnModal({ id, onClose, onChanged }: { id: string; onClose: () => void;
                         {g.posted_at && <span className="text-muted">· posted {formatDateTime(g.posted_at)} by {g.posted_by_name}</span>}
                         <Link href={`/lifecycle?grn_id=${g.grn_id}`} className="inline-flex items-center gap-1 font-medium text-brand-600"><FolderOpen className="h-4 w-4" /> Procurement file</Link>
                     </div>
+                    {editable && blockers.length > 0 && (
+                        <div className={`rounded-lg border px-4 py-3 text-[13px] ${inspected ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                            <p className="flex items-center gap-2 font-medium">
+                                <AlertTriangle className="h-4 w-4" />
+                                The GRN can be generated only after every item is inspected and accepted.
+                            </p>
+                            <ul className="mt-1.5 list-disc pl-6">
+                                {blockers.map((b) => <li key={b}>{b}</li>)}
+                            </ul>
+                            {inspected && (
+                                <p className="mt-1.5 text-[12px]">
+                                    Have the vendor replace the rejected goods and re-inspect, or cancel this GRN and record a new one for the goods you accept.
+                                </p>
+                            )}
+                        </div>
+                    )}
                     <div className="overflow-x-auto rounded-lg border border-line">
                         <table className="w-full">
                             <thead className="bg-slate-50">
@@ -351,6 +392,7 @@ function GrnModal({ id, onClose, onChanged }: { id: string; onClose: () => void;
                                     <th className="th text-right">Short / excess</th>
                                     <th className="th text-right">Accepted</th>
                                     <th className="th text-right">Rejected</th>
+                                    <th className="th">QC</th>
                                     <th className="th">Remarks</th>
                                 </tr>
                             </thead>
@@ -362,16 +404,26 @@ function GrnModal({ id, onClose, onChanged }: { id: string; onClose: () => void;
                                         <td className="td text-right">{l.dispatched_quantity ?? '—'}</td>
                                         <td className="td text-right">{l.received_quantity}</td>
                                         <td className="td text-right">{l.short_quantity ? `-${l.short_quantity}` : l.excess_quantity ? `+${l.excess_quantity}` : '0'}</td>
-                                        {editable ? (
+                                        {editable && l.received_quantity > 0 ? (
                                             <>
                                                 <td className="td w-24"><input className="input h-8 text-right" inputMode="decimal" value={inspect[l.po_item_id]?.accepted ?? ''} onChange={(e) => setInspect({ ...inspect, [l.po_item_id]: { ...inspect[l.po_item_id], accepted: e.target.value } })} aria-label={`Accepted ${l.name}`} /></td>
                                                 <td className="td w-24"><input className="input h-8 text-right" inputMode="decimal" value={inspect[l.po_item_id]?.rejected ?? ''} onChange={(e) => setInspect({ ...inspect, [l.po_item_id]: { ...inspect[l.po_item_id], rejected: e.target.value } })} aria-label={`Rejected ${l.name}`} /></td>
+                                                <td className="td whitespace-nowrap">
+                                                    {lineIssue(l) ? (
+                                                        <button type="button" className="text-[12px] font-medium text-brand-600 hover:underline" title={lineIssue(l) ?? undefined} onClick={() => setInspect({ ...inspect, [l.po_item_id]: { ...inspect[l.po_item_id], accepted: String(l.received_quantity), rejected: '0' } })}>
+                                                            Accept all
+                                                        </button>
+                                                    ) : (
+                                                        <StatusPill status={Number(inspect[l.po_item_id]?.rejected) > 0 ? (Number(inspect[l.po_item_id]?.accepted) > 0 ? 'partially_accepted' : 'rejected') : 'accepted'} />
+                                                    )}
+                                                </td>
                                                 <td className="td"><input className="input h-8" value={inspect[l.po_item_id]?.remarks ?? ''} onChange={(e) => setInspect({ ...inspect, [l.po_item_id]: { ...inspect[l.po_item_id], remarks: e.target.value } })} aria-label={`Remarks ${l.name}`} /></td>
                                             </>
                                         ) : (
                                             <>
-                                                <td className="td text-right text-emerald-700">{l.accepted_quantity}</td>
-                                                <td className="td text-right text-rose-700">{l.rejected_quantity}</td>
+                                                <td className="td text-right text-emerald-700">{l.accepted_quantity ?? '—'}</td>
+                                                <td className="td text-right text-rose-700">{l.rejected_quantity ?? '—'}</td>
+                                                <td className="td">{l.inspection_status ? <StatusPill status={l.inspection_status} /> : l.received_quantity > 0 ? <StatusPill status="pending" /> : '—'}</td>
                                                 <td className="td">{l.remarks || '—'}</td>
                                             </>
                                         )}

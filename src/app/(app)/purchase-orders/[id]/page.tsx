@@ -167,8 +167,25 @@ export default function PurchaseOrderDetailPage({ params, searchParams }: { para
                             {po.accepted_at && ` · accepted ${formatDate(po.accepted_at)}`}
                         </p>
                         {po.requires_approval && po.status === 'pending_approval' && (
-                            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-                                This exceeded the department budget, so it needs approval before it can be sent.
+                            <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+                                <p>
+                                    This order exceeds the {data.approval?.budget?.label ?? po.budget_label ?? 'allocated'} budget
+                                    {data.approval?.budget?.shortfall_minor ? ` by ${formatMoney(data.approval.budget.shortfall_minor, po.currency)}` : ''}, so it cannot be sent until a Procurement Admin approves it.
+                                </p>
+                                <Link href="/budget?tab=approvals" className="font-medium underline">Open approvals</Link>
+                            </div>
+                        )}
+                        {po.budget_revision && po.budget_revision.delta_minor > 0 && (
+                            <p className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-[12px] text-violet-800">
+                                Approved over budget{po.approval_decided_by_name ? ` by ${po.approval_decided_by_name}` : ''}: {po.budget_revision.budget_label} revised from{' '}
+                                {formatMoney(po.budget_revision.previous_allocated_minor, po.currency)} to {formatMoney(po.budget_revision.new_allocated_minor, po.currency)}.
+                            </p>
+                        )}
+                        {data.budget && (
+                            <p className="mt-2 text-[12px] text-muted">
+                                Budget: {data.budget.label} · allocated {formatMoney(data.budget.allocated_minor, data.budget.currency)}
+                                {data.budget.allocated_minor !== data.budget.original_allocated_minor ? ` (originally ${formatMoney(data.budget.original_allocated_minor, data.budget.currency)})` : ''} · remaining{' '}
+                                {formatMoney(data.budget.remaining_minor, data.budget.currency)}
                             </p>
                         )}
                         {po.status === 'vendor_rejected' && (

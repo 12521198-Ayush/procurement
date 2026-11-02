@@ -32,6 +32,8 @@ const MILESTONE_EVENTS = new Set([
     'QUOTATION_REVISED',
     'RFQ_CLOSED',
     'BID_OPENED',
+    'NEGOTIATION_STARTED',
+    'NEGOTIATION_CLOSED',
     'VENDOR_SELECTED',
     'RFQ_CANCELLED',
     'PO_CREATED',
@@ -100,7 +102,7 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
 
                         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-slate-600">
                             {data.department_name && <span>Department: {data.department_name}</span>}
-                            {data.category_name && <span>Category: {data.category_name}</span>}
+                            {data.category_name && <span>Category: {data.category_name}{data.subcategory_name ? ` / ${data.subcategory_name}` : ''}</span>}
                             {data.delivery_location && <span>Deliver to: {data.delivery_location}</span>}
                             <span>Bids open: {formatDateTime(data.bid?.opening_at || data.expires_at)}</span>
                             <span>Revisions: {data.allow_quotation_revision ? 'allowed' : 'not allowed'}</span>

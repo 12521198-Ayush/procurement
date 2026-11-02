@@ -10,8 +10,8 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { post } from '@/lib/api';
-import { useList, useOptions } from '@/lib/hooks';
-import { formatDateTime } from '@/lib/format';
+import { useList, useOptions, useResource } from '@/lib/hooks';
+import { formatDateTime, formatMoney } from '@/lib/format';
 
 type Item = {
     key: string;
@@ -19,13 +19,14 @@ type Item = {
     specification: string;
     quantity: string;
     unit: string;
+    expected_price: string;
     required_date: string;
 };
 
 const STEPS = ['Basic Details', 'Items', 'Vendors', 'Expiry & Terms', 'Review & Send'];
 
 function blankItem(): Item {
-    return { key: Math.random().toString(36).slice(2), name: '', specification: '', quantity: '1', unit: 'Nos', required_date: '' };
+    return { key: Math.random().toString(36).slice(2), name: '', specification: '', quantity: '1', unit: 'Nos', expected_price: '', required_date: '' };
 }
 
 export default function NewRfqPage() {
@@ -35,8 +36,9 @@ export default function NewRfqPage() {
     const [step, setStep] = useState(1);
     const [busy, setBusy] = useState(false);
 
-    const departments = useOptions('/procurement/departments/list', 'department_id');
-    const categories = useOptions('/procurement/categories/list', 'category_id');
+    const departments = useOptions('/procurement/masters/department/list', 'department_id');
+    const categories = useOptions('/procurement/masters/category/list', 'category_id');
+    const units = useOptions('/procurement/masters/unit/list', 'name');
     const vendorList = useList<any>('/procurement/vendors/list', { status: 'active' }, { limit: 200 });
 
     const [basic, setBasic] = useState({
@@ -44,9 +46,11 @@ export default function NewRfqPage() {
         description: '',
         department_id: '',
         category_id: '',
+        subcategory_id: '',
         delivery_location: '',
         expected_delivery_date: ''
     });
+    const subcategories = useOptions('/procurement/masters/subcategory/list', 'subcategory_id', 'name', basic.category_id ? { category_id: basic.category_id } : null);
     const [items, setItems] = useState<Item[]>([blankItem()]);
     const [vendorIds, setVendorIds] = useState<string[]>([]);
     const [terms, setTerms] = useState({
@@ -115,6 +119,7 @@ export default function NewRfqPage() {
                     specification: i.specification,
                     quantity: Number(i.quantity),
                     unit: i.unit,
+                    expected_price: i.expected_price || undefined,
                     required_date: i.required_date || null
                 }))
             });
@@ -177,9 +182,18 @@ export default function NewRfqPage() {
                         <Field label="Category">
                             <Select
                                 value={basic.category_id}
-                                onChange={(e) => setBasic({ ...basic, category_id: e.target.value })}
+                                onChange={(e) => setBasic({ ...basic, category_id: e.target.value, subcategory_id: '' })}
                                 options={categories}
                                 placeholder="Select category"
+                            />
+                        </Field>
+                        <Field label="Subcategory" hint={basic.category_id ? 'Purchases are checked against its budget.' : 'Choose a category first'}>
+                            <Select
+                                value={basic.subcategory_id}
+                                onChange={(e) => setBasic({ ...basic, subcategory_id: e.target.value })}
+                                options={subcategories}
+                                placeholder={basic.category_id ? 'Select subcategory' : '—'}
+                                disabled={!basic.category_id}
                             />
                         </Field>
                         <Field label="Delivery location">
@@ -232,13 +246,29 @@ export default function NewRfqPage() {
                                         />
                                     </Field>
                                     <Field label="Unit">
-                                        <Input value={item.unit} onChange={(e) => updateItem(item.key, { unit: e.target.value })} />
+                                        {units.length ? (
+                                            <Select
+                                                value={item.unit}
+                                                onChange={(e) => updateItem(item.key, { unit: e.target.value })}
+                                                options={units.some((u) => u.value === item.unit) ? units : [{ value: item.unit, label: item.unit }, ...units]}
+                                            />
+                                        ) : (
+                                            <Input value={item.unit} onChange={(e) => updateItem(item.key, { unit: e.target.value })} />
+                                        )}
                                     </Field>
-                                    <Field label="Specification" className="sm:col-span-3">
+                                    <Field label="Specification" className="sm:col-span-2">
                                         <Input
                                             value={item.specification}
                                             onChange={(e) => updateItem(item.key, { specification: e.target.value })}
                                             placeholder="i7 / 16GB / 512GB SSD"
+                                        />
+                                    </Field>
+                                    <Field label="Estimated unit price" hint="Optional, for the budget check.">
+                                        <Input
+                                            inputMode="decimal"
+                                            value={item.expected_price}
+                                            onChange={(e) => updateItem(item.key, { expected_price: e.target.value })}
+                                            placeholder="0.00"
                                         />
                                     </Field>
                                     <Field label="Required by">
@@ -367,8 +397,16 @@ export default function NewRfqPage() {
                             <Detail label="Title" value={basic.title} />
                             <Detail label="Department" value={labelFor(departments, basic.department_id)} />
                             <Detail label="Category" value={labelFor(categories, basic.category_id)} />
+                            <Detail label="Subcategory" value={labelFor(subcategories, basic.subcategory_id)} />
                             <Detail label="Delivery location" value={basic.delivery_location} />
                         </Section>
+
+                        <RfqBudgetCheck
+                            department_id={basic.department_id}
+                            category_id={basic.category_id}
+                            subcategory_id={basic.subcategory_id}
+                            estimate={items.reduce((s, i) => s + (Number(i.expected_price) || 0) * (Number(i.quantity) || 0), 0)}
+                        />
 
                         <Section title={`Items (${items.length})`}>
                             <div className="col-span-2 overflow-x-auto">
@@ -470,4 +508,34 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
 
 function labelFor(options: { value: string; label: string }[], value: string) {
     return options.find((o) => o.value === value)?.label ?? '';
+}
+
+/** Read-only budget position for the review step; the binding check happens when the PO is raised. */
+function RfqBudgetCheck(props: { department_id: string; category_id: string; subcategory_id: string; estimate: number }) {
+    const enabled = !!(props.department_id || props.category_id || props.subcategory_id);
+    const { data } = useResource<any>(enabled ? '/procurement/budgets/check' : null, {
+        department_id: props.department_id || undefined,
+        category_id: props.category_id || undefined,
+        subcategory_id: props.subcategory_id || undefined,
+        amount: props.estimate.toFixed(2)
+    });
+    if (!enabled || !data) return null;
+    if (data.status === 'no_budget') {
+        return <p className="rounded-lg bg-slate-50 px-4 py-3 text-[12px] text-muted">No budget is allocated for this category / subcategory.</p>;
+    }
+    const over = props.estimate > 0 && data.status === 'exceeded';
+    return (
+        <div className={`rounded-lg border px-4 py-3 text-[13px] ${over ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+            <p className="font-medium">
+                {data.budget_label}: {formatMoney(data.remaining_minor)} remaining of {formatMoney(data.allocated_minor)}
+            </p>
+            {props.estimate > 0 && (
+                <p className="mt-0.5 text-[12px]">
+                    {over
+                        ? `Estimated value ${formatMoney(Math.round(props.estimate * 100))} is over the remaining budget. The purchase order will need a Procurement Admin's approval.`
+                        : `Estimated value ${formatMoney(Math.round(props.estimate * 100))} fits within the budget.`}
+                </p>
+            )}
+        </div>
+    );
 }

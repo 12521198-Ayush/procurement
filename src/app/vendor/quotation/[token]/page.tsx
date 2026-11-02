@@ -74,18 +74,37 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
 
             const portal = await post('/procurement/vendor/rfq', {});
             setRfq(portal);
+            // In a negotiation round the vendor revises their standing offer, so start from it.
+            const saved: Record<string, any> = {};
+            if (portal.negotiation) (portal.quotation_items || []).forEach((i: any) => (saved[i.rfq_item_id] = i));
             setLines(
-                portal.items.map((i: any) => ({
-                    rfq_item_id: i.rfq_item_id,
-                    name: i.name,
-                    quantity: i.quantity,
-                    unit: i.unit,
-                    specification: i.specification,
-                    unit_price: '',
-                    tax_percent: '18',
-                    discount_percent: ''
-                }))
+                portal.items.map((i: any) => {
+                    const s = saved[i.rfq_item_id];
+                    const base = s ? s.unit_price_minor * s.quantity - (s.discount_minor || 0) : 0;
+                    return {
+                        rfq_item_id: i.rfq_item_id,
+                        name: i.name,
+                        quantity: i.quantity,
+                        unit: i.unit,
+                        specification: i.specification,
+                        unit_price: s ? (s.unit_price_minor / 100).toFixed(2) : '',
+                        tax_percent: s && base > 0 ? String(+((s.tax_minor / base) * 100).toFixed(2)) : '18',
+                        discount_percent: s && s.discount_minor && s.unit_price_minor ? String(+((s.discount_minor / (s.unit_price_minor * s.quantity)) * 100).toFixed(2)) : ''
+                    };
+                })
             );
+            const q = portal.negotiation ? portal.quotation : null;
+            if (q) {
+                setExtras({ shipping_charges: q.shipping_minor ? (q.shipping_minor / 100).toFixed(2) : '', other_charges: q.other_charges_minor ? (q.other_charges_minor / 100).toFixed(2) : '' });
+                setMeta({
+                    vendor_quotation_number: q.vendor_quotation_number || '',
+                    valid_until: q.valid_until ? String(q.valid_until).slice(0, 10) : '',
+                    delivery_days: q.delivery_days != null ? String(q.delivery_days) : '',
+                    payment_terms: q.payment_terms || '',
+                    warranty: q.warranty || '',
+                    remarks: q.remarks || ''
+                });
+            }
             setStage('form');
         } catch (err: any) {
             setError(err.message);
@@ -143,7 +162,11 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
         if (!next.includes('')) verifyOtp(next.join(''));
     }
 
-    const timer = useMemo(() => countdown(invite?.rfq?.expires_at ?? rfq?.rfq?.expires_at), [invite, rfq]);
+    const timer = useMemo(
+        () => countdown(rfq?.submission_deadline ?? invite?.submission_deadline ?? invite?.rfq?.expires_at ?? rfq?.rfq?.expires_at),
+        [invite, rfq]
+    );
+    const negotiation = rfq?.negotiation ?? invite?.negotiation ?? null;
 
     return (
         <div className="min-h-screen bg-canvas">
@@ -200,6 +223,11 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                             <p className="mt-2 text-[13px] text-muted">
                                 {invite.rfq.rfq_number} · {invite.rfq.title}
                             </p>
+                            {negotiation && invite.submission_open && (
+                                <p className="mt-3 rounded-lg bg-violet-50 px-4 py-2.5 text-[13px] text-violet-800">
+                                    Negotiation round {negotiation.round_no} - submit your revised offer by {formatDateTime(negotiation.deadline)}.
+                                </p>
+                            )}
 
                             {!invite.submission_open ? (
                                 <p className="mt-5 rounded-lg bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
@@ -265,9 +293,19 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                             <p className="mt-1 text-[14px] text-slate-700">{rfq.rfq.title}</p>
                             {rfq.rfq.description && <p className="mt-1 text-[13px] text-muted">{rfq.rfq.description}</p>}
                             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-slate-600">
-                                <span>Closes: {formatDateTime(rfq.rfq.expires_at)}</span>
+                                <span>Closes: {formatDateTime(rfq.submission_deadline ?? rfq.rfq.expires_at)}</span>
                                 {rfq.rfq.delivery_location && <span>Deliver to: {rfq.rfq.delivery_location}</span>}
                             </div>
+                            {negotiation && (
+                                <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-[13px] text-violet-900">
+                                    <p className="font-medium">Negotiation round {negotiation.round_no}: you have been shortlisted</p>
+                                    <p className="mt-1">
+                                        Revise your offer below and submit once. Open for revision: {negotiation.negotiable_terms.map((t: string) => t.replace(/_/g, ' ')).join(', ')}.
+                                        {negotiation.previous_total_minor != null && <> Your current offer is {inr(negotiation.previous_total_minor)}.</>} If you do not respond, it stands.
+                                    </p>
+                                    {negotiation.message && <p className="mt-1 italic">&ldquo;{negotiation.message}&rdquo;</p>}
+                                </div>
+                            )}
                         </Panel>
 
                         {!review ? (
@@ -377,7 +415,9 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                             <>
                                 <Panel title="Review before submitting">
                                     <p className="mb-4 text-[13px] text-muted">
-                                        Once submitted your quotation is final and cannot be changed.
+                                        {negotiation
+                                            ? `This is your revised offer for round ${negotiation.round_no}. You can submit it once; your previous offer is kept on record.`
+                                            : 'Once submitted your quotation is final and cannot be changed.'}
                                     </p>
                                     <div className="overflow-x-auto">
                                         <table className="w-full min-w-[520px]">
@@ -419,7 +459,7 @@ export default function VendorQuotationPage({ params }: { params: { token: strin
                                     </button>
                                     <button type="button" className="btn-primary" onClick={submit} disabled={busy}>
                                         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                        Submit quotation
+                                        {negotiation ? 'Submit revised offer' : 'Submit quotation'}
                                     </button>
                                 </div>
                             </>
