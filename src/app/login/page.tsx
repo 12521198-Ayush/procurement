@@ -28,6 +28,12 @@ export default function LoginPage() {
     }, [ready, user, router]);
 
     useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('expired')) {
+            setError('Your session has expired. Please sign in again.');
+        }
+    }, []);
+
+    useEffect(() => {
         if (secondsLeft <= 0) return;
         const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
         return () => clearTimeout(t);

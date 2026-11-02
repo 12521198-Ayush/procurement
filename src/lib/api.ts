@@ -67,6 +67,67 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+// Sign-in and vendor-link calls handle their own 401s.
+const SESSION_FREE = /^\/procurement\/(auth\/|vendor\/)/;
+let refreshing: Promise<string | null> | null = null;
+
+/** One refresh at a time, however many requests failed together. */
+function refreshAccessToken(): Promise<string | null> {
+    if (!refreshing) {
+        const refresh = localStorage.getItem(REFRESH_KEY);
+        refreshing = (
+            refresh
+                ? axios
+                      .post(`${BASE_URL}/procurement/auth/refresh`, { refresh_token: refresh }, { timeout: 15000 })
+                      .then((res) => {
+                          const data = res.data?.data;
+                          if (!data?.access_token) return null;
+                          localStorage.setItem(TOKEN_KEY, data.access_token);
+                          if (data.user) localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+                          return data.access_token as string;
+                      })
+                      .catch(() => null)
+                : Promise.resolve(null)
+        ).finally(() => {
+            refreshing = null;
+        });
+    }
+    return refreshing;
+}
+
+/** Clears the local session and sends the user to sign in again. */
+export function endSession() {
+    if (typeof window === 'undefined') return;
+    [TOKEN_KEY, REFRESH_KEY, USER_KEY, PREMISE_KEY].forEach((k) => localStorage.removeItem(k));
+    activePremiseId = null;
+    if (!window.location.pathname.startsWith('/login')) window.location.replace('/login?expired=1');
+}
+
+api.interceptors.response.use(undefined, async (error: AxiosError) => {
+    const config = error.config as (AxiosError['config'] & { _retried?: boolean }) | undefined;
+    if (
+        error.response?.status !== 401 ||
+        !config ||
+        typeof window === 'undefined' ||
+        SESSION_FREE.test(config.url || '') ||
+        window.location.pathname.startsWith('/vendor')
+    ) {
+        return Promise.reject(error);
+    }
+
+    if (!config._retried) {
+        const token = await refreshAccessToken();
+        if (token) {
+            config._retried = true;
+            config.headers.Authorization = `Bearer ${token}`;
+            return api(config);
+        }
+    }
+
+    endSession();
+    return Promise.reject(error);
+});
+
 /**
  * The backend answers `{ error: null, data }` or `{ error: { code, message } }`,
  * and uses a real HTTP status either way. Unwrap both shapes into one place so
