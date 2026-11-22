@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Send, Trash2 } from 'lucide-react';
 import { Card, EmptyState } from '@/components/ui/Card';
@@ -30,16 +30,29 @@ function blankItem(): Item {
 }
 
 export default function NewRfqPage() {
+    return (
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-slate-200" />}>
+            <RfqForm />
+        </Suspense>
+    );
+}
+
+function RfqForm() {
     const router = useRouter();
     const toast = useToast();
+    const searchParams = useSearchParams();
+    const editId = searchParams.get('edit');
 
     const [step, setStep] = useState(1);
     const [busy, setBusy] = useState(false);
+    const [initializedEditId, setInitializedEditId] = useState<string | null>(null);
 
     const departments = useOptions('/procurement/masters/department/list', 'department_id');
     const categories = useOptions('/procurement/masters/category/list', 'category_id');
     const units = useOptions('/procurement/masters/unit/list', 'name');
     const vendorList = useList<any>('/procurement/vendors/list', { status: 'active' }, { limit: 200 });
+    const existing = useResource<any>(editId ? '/procurement/rfq/detail' : null, { rfq_id: editId || undefined });
+    const editData = existing.data;
 
     const [basic, setBasic] = useState({
         title: '',
@@ -63,6 +76,39 @@ export default function NewRfqPage() {
         notes: ''
     });
 
+    useEffect(() => {
+        if (!editId || !editData || initializedEditId === editId) return;
+        setBasic({
+            title: editData.title || '',
+            description: editData.description || '',
+            department_id: editData.department_id || '',
+            category_id: editData.category_id || '',
+            subcategory_id: editData.subcategory_id || '',
+            delivery_location: editData.delivery_location || '',
+            expected_delivery_date: dateInput(editData.expected_delivery_date)
+        });
+        setItems((editData.items || []).map((item: any) => ({
+            key: item.rfq_item_id || Math.random().toString(36).slice(2),
+            name: item.name || '',
+            specification: item.specification || '',
+            quantity: String(item.quantity || ''),
+            unit: item.unit || 'Nos',
+            expected_price: item.expected_price_minor == null ? '' : (item.expected_price_minor / 100).toFixed(2),
+            required_date: dateInput(item.required_date)
+        })));
+        setVendorIds((editData.vendors || []).map((vendor: any) => vendor.vendor_id));
+        setTerms({
+            expires_date: dateInput(editData.expires_at),
+            expires_time: timeInput(editData.expires_at),
+            opening_date: dateInput(editData.bid?.opening_at || editData.bid_opening_at),
+            opening_time: timeInput(editData.bid?.opening_at || editData.bid_opening_at),
+            allow_revision: !!editData.allow_quotation_revision,
+            terms_and_conditions: editData.terms_and_conditions || '',
+            notes: editData.notes || ''
+        });
+        setInitializedEditId(editId);
+    }, [editId, editData, initializedEditId]);
+
     const expiresAt = useMemo(() => {
         if (!terms.expires_date) return null;
         // Interpreted in the browser's zone; the server stores UTC and enforces it.
@@ -85,11 +131,14 @@ export default function NewRfqPage() {
         if (step === 3 && !vendorIds.length) return 'Select at least one vendor.';
         if (step === 4) {
             if (!expiresAt) return 'Set the bid expiry date.';
-            if (expiresAt <= new Date()) return 'Expiry must be in the future.';
+            const previousExpiry = editData ? new Date(editData.expires_at) : null;
+            const sameExpiredMinute = previousExpiry && previousExpiry <= new Date() &&
+                Math.floor(expiresAt.getTime() / 60000) === Math.floor(previousExpiry.getTime() / 60000);
+            if (expiresAt <= new Date() && !sameExpiredMinute) return 'A changed expiry must be in the future.';
             if (openingAt && openingAt < expiresAt) return 'Bid opening must be at or after the submission deadline.';
         }
         return null;
-    }, [step, basic.title, items, vendorIds, expiresAt, openingAt]);
+    }, [step, basic.title, items, vendorIds, expiresAt, openingAt, editData]);
 
     function next() {
         if (stepErrors) {
@@ -106,7 +155,7 @@ export default function NewRfqPage() {
         }
         setBusy(true);
         try {
-            const created = await post('/procurement/rfq/create', {
+            const payload = {
                 ...basic,
                 expires_at: expiresAt?.toISOString(),
                 bid_opening_at: openingAt?.toISOString(),
@@ -122,7 +171,16 @@ export default function NewRfqPage() {
                     expected_price: i.expected_price || undefined,
                     required_date: i.required_date || null
                 }))
-            });
+            };
+
+            if (editId) {
+                await post('/procurement/rfq/update', { rfq_id: editId, ...payload });
+                toast.success('RFQ updated');
+                router.push(`/rfq/${editId}`);
+                return;
+            }
+
+            const created = await post('/procurement/rfq/create', payload);
 
             if (sendNow) {
                 const result = await post('/procurement/rfq/send', { rfq_id: created.rfq_id });
@@ -138,7 +196,19 @@ export default function NewRfqPage() {
         }
     }
 
-    const selectedVendors = vendorList.rows.filter((v) => vendorIds.includes(v.vendor_id));
+    if (editId && existing.error) {
+        return <Card><EmptyState title="Could not load this RFQ" hint={existing.error} /></Card>;
+    }
+    if (editId && (existing.loading || initializedEditId !== editId)) {
+        return <div className="h-64 animate-pulse rounded-xl bg-slate-200" />;
+    }
+
+    const selectableVendors: any[] = [...vendorList.rows];
+    (editData?.vendors || []).forEach((vendor: any) => {
+        if (!selectableVendors.some((option) => option.vendor_id === vendor.vendor_id)) selectableVendors.push(vendor);
+    });
+    const lockedVendorIds = (editData?.vendors || []).filter((vendor: any) => vendor.invited_at).map((vendor: any) => vendor.vendor_id);
+    const selectedVendors = selectableVendors.filter((v) => vendorIds.includes(v.vendor_id));
 
     return (
         <div>
@@ -147,7 +217,10 @@ export default function NewRfqPage() {
                 Back to RFQs
             </Link>
 
-            <PageHeader title="Raise Bid / RFQ" subtitle="Vendors receive a unique, single-use link by email." />
+            <PageHeader
+                title={editId ? `Edit ${editData.rfq_number}` : 'Raise Bid / RFQ'}
+                subtitle={editId ? 'Update the RFQ details, items, vendors, expiry, and terms.' : 'Vendors receive a unique, single-use link by email.'}
+            />
 
             <Card className="mb-5">
                 <Stepper steps={STEPS} current={step} />
@@ -296,9 +369,13 @@ export default function NewRfqPage() {
                         </p>
                         {vendorList.loading ? (
                             <div className="h-40 animate-pulse rounded-xl bg-slate-100" />
-                        ) : vendorList.rows.length ? (
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                {vendorList.rows.map((v) => {
+                        ) : selectableVendors.length ? (
+                            <>
+                                {editId && lockedVendorIds.length > 0 && (
+                                    <p className="mb-3 text-[12px] text-muted">Previously invited vendors stay selected; add new vendors here, then resend invitations after saving.</p>
+                                )}
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    {selectableVendors.map((v) => {
                                     const checked = vendorIds.includes(v.vendor_id);
                                     return (
                                         <label
@@ -310,6 +387,7 @@ export default function NewRfqPage() {
                                             <input
                                                 type="checkbox"
                                                 checked={checked}
+                                                disabled={lockedVendorIds.includes(v.vendor_id)}
                                                 onChange={(e) =>
                                                     setVendorIds(
                                                         e.target.checked
@@ -327,8 +405,9 @@ export default function NewRfqPage() {
                                             </span>
                                         </label>
                                     );
-                                })}
-                            </div>
+                                    })}
+                                </div>
+                            </>
                         ) : (
                             <EmptyState title="No active vendors" hint="Add vendors before raising an RFQ." />
                         )}
@@ -469,13 +548,22 @@ export default function NewRfqPage() {
                         </button>
                     ) : (
                         <div className="flex gap-2">
-                            <button type="button" className="btn-ghost" onClick={() => submit(false)} disabled={busy}>
-                                Save as draft
-                            </button>
-                            <button type="button" className="btn-primary" onClick={() => submit(true)} disabled={busy}>
-                                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                Send to vendors
-                            </button>
+                            {editId ? (
+                                <button type="button" className="btn-primary" onClick={() => submit(false)} disabled={busy}>
+                                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                    Save changes
+                                </button>
+                            ) : (
+                                <>
+                                    <button type="button" className="btn-ghost" onClick={() => submit(false)} disabled={busy}>
+                                        Save as draft
+                                    </button>
+                                    <button type="button" className="btn-primary" onClick={() => submit(true)} disabled={busy}>
+                                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                        Send to vendors
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -508,6 +596,20 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
 
 function labelFor(options: { value: string; label: string }[], value: string) {
     return options.find((o) => o.value === value)?.label ?? '';
+}
+
+function dateInput(value: string | Date | null | undefined) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function timeInput(value: string | Date | null | undefined) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return '';
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 /** Read-only budget position for the review step; the binding check happens when the PO is raised. */

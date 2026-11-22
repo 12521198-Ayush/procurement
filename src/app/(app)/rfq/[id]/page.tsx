@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, ChevronRight, Clock, FolderOpen, Lock, Send, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ChevronRight, Clock, FolderOpen, Lock, Pencil, Send, XCircle } from 'lucide-react';
 import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import StatusPill from '@/components/ui/StatusPill';
 import { useToast } from '@/components/ui/Toast';
@@ -119,6 +119,12 @@ export default function RfqDetailPage({ params }: { params: { id: string } }) {
                         </div>
 
                         <div className="flex flex-wrap justify-end gap-2">
+                            {data.can_edit && can('RFQ_EDIT') && (
+                                <Link href={`/rfq/new?edit=${encodeURIComponent(data.rfq_id)}`} className="btn-ghost">
+                                    <Pencil className="h-4 w-4" />
+                                    Edit RFQ
+                                </Link>
+                            )}
                             <Link href={`/lifecycle?rfq=${data.rfq_id}`} className="btn-ghost">
                                 <FolderOpen className="h-4 w-4" />
                                 Procurement file
